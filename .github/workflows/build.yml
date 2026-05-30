@@ -1,0 +1,50 @@
+name: Build PythonFar DLLs
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        architecture: [x64, x86]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Visual Studio
+      uses: microsoft/setup-msbuild@v1.1
+      with:
+        vs-version: '17.0'
+    
+    - name: Create build directory
+      run: mkdir -p build
+    
+    - name: Configure CMake
+      run: |
+        cd build
+        cmake .. -G "Visual Studio 17 2022" -A ${{ matrix.architecture }}
+      shell: cmd
+    
+    - name: Build Release
+      run: |
+        cd build
+        cmake --build . --config Release
+      shell: cmd
+    
+    - name: Upload DLL artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: pythonfar-dlls-${{ matrix.architecture }}
+        path: |
+          build/Release/PythonFar.dll
+          build/Release/PythonFar.adapter.dll
+          python/far_struct_offsets.json
+        retention-days: 30
+    
+
