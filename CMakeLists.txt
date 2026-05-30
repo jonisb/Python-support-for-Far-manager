@@ -4,6 +4,9 @@ project(PythonFar)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Add include directories
+include_directories(include)
+
 # ===== Loader Plugin (PythonFar.dll) =====
 add_library(PythonFar SHARED
     src/loader/loader.cpp
@@ -24,8 +27,9 @@ enable_testing()
 
 add_executable(pythonfar_tests
     tests/test_main.cpp
+    tests/test_loader.cpp
 )
-target_include_directories(pythonfar_tests PRIVATE)
+target_include_directories(pythonfar_tests PRIVATE src/loader)
 target_link_libraries(pythonfar_tests
     gtest_main
 )
