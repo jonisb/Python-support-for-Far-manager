@@ -1,5 +1,6 @@
 #pragma once
 
+#include <windows.h>
 #include <string>
 #include <fstream>
 #include <mutex>
@@ -8,6 +9,18 @@
 #include <cstdlib>
 
 namespace PythonFar {
+
+// Safe environment variable getter (replaces unsafe getenv)
+inline std::string SafeGetEnv(const char* name, const std::string& defaultValue = "") {
+    char* value = nullptr;
+    size_t len = 0;
+    if (_dupenv_s(&value, &len, name) == 0 && value != nullptr) {
+        std::string result(value);
+        free(value);
+        return result;
+    }
+    return defaultValue;
+}
 
 enum class LogLevel {
     Trace = 0,
@@ -68,14 +81,14 @@ public:
 
 private:
     Logger() {
-        // Default log file
-        std::string tempDir = std::getenv("TEMP") ? std::getenv("TEMP") : "C:\\temp";
-        m_logFile.open(tempDir + "\\pythonfar_loader.log", std::ios::app);
+        // Default log file - use safe environment variable getter
+        std::string tempDir = SafeGetEnv("TEMP", "C:\\temp");
+        std::string logPath = tempDir + "\\pythonfar_loader.log";
+        m_logFile.open(logPath, std::ios::app);
         
         // Check environment variable for log level
-        const char* envLevel = std::getenv("PYTHONFAR_LOG_LEVEL");
-        if (envLevel) {
-            std::string levelStr(envLevel);
+        std::string levelStr = SafeGetEnv("PYTHONFAR_LOG_LEVEL");
+        if (!levelStr.empty()) {
             if (levelStr == "TRACE" || levelStr == "0") m_minLevel = LogLevel::Trace;
             else if (levelStr == "INFO" || levelStr == "1") m_minLevel = LogLevel::Info;
             else if (levelStr == "ERROR" || levelStr == "2") m_minLevel = LogLevel::Error;
