@@ -130,8 +130,12 @@ extern "C" __declspec(dllexport) intptr_t WINAPI PythonFar_DialogRunWithTimeout(
 
     if (!g_BridgeValid || !g_BridgeStartupInfo.DialogRun) return -1;
 
-    GUID pluginGuid = *PluginId;
+    // TimeoutMs == 0 means "no auto-close". Also guard against null PluginId.
+    if (TimeoutMs == 0 || !PluginId || !g_BridgeStartupInfo.AdvControl) {
+        return g_BridgeStartupInfo.DialogRun(hDlg);
+    }
 
+    const GUID pluginGuid = *PluginId;
     std::thread([pluginGuid, hDlg, TimeoutMs]() {
         std::this_thread::sleep_for(std::chrono::milliseconds(TimeoutMs));
 
