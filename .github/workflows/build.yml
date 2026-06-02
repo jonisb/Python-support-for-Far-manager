@@ -71,32 +71,24 @@ jobs:
     
     - name: Setup python_runtime
       run: |
-        $arch = "${{ matrix.arch }}"
-        $version = "3.11.9"
-        $embedArch = if ($arch -eq "x64") { "amd64" } else { "win32" }
-        $url = "https://www.python.org/ftp/python/$version/python-$version-embed-$embedArch.zip"
+        $pythonDir = python -c "import sys; print(sys.prefix)"
         $dest = "build\Release\python_runtime"
-        $temp = "$env:TEMP\pythonfar_embed"
         
-        New-Item -ItemType Directory -Force -Path $temp | Out-Null
+        Write-Host "Python prefix: $pythonDir"
+        
         New-Item -ItemType Directory -Force -Path "$dest\DLLs" | Out-Null
         New-Item -ItemType Directory -Force -Path "$dest\Lib" | Out-Null
+        New-Item -ItemType Directory -Force -Path "$dest\site-packages" | Out-Null
         
-        Write-Host "Downloading $url"
-        Invoke-WebRequest -Uri $url -OutFile "$temp\embed.zip" -UseBasicParsing
-        
-        Write-Host "Extracting..."
-        Expand-Archive -Path "$temp\embed.zip" -DestinationPath "$temp\extracted" -Force
-        
-        Write-Host "Copying DLLs and .pyd files..."
-        Get-ChildItem "$temp\extracted" -File | Where-Object { $_.Extension -in @(".dll",".pyd") } |
+        Write-Host "Copying DLLs..."
+        Get-ChildItem "$pythonDir" -File | Where-Object { $_.Extension -in @(".dll") } |
+            ForEach-Object { Copy-Item $_.FullName "$dest\DLLs\" -Force }
+        Get-ChildItem "$pythonDir\DLLs" -File | Where-Object { $_.Extension -in @(".dll",".pyd") } |
             ForEach-Object { Copy-Item $_.FullName "$dest\DLLs\" -Force }
         
-        Write-Host "Expanding stdlib..."
-        $stdlibZip = "$temp\extracted\python311.zip"
-        Expand-Archive -Path $stdlibZip -DestinationPath "$dest\Lib" -Force
+        Write-Host "Copying Lib..."
+        Copy-Item "$pythonDir\Lib\*" "$dest\Lib\" -Recurse -Force
         
-        Remove-Item $temp -Recurse -Force
         Write-Host "python_runtime setup complete."
       shell: pwsh
     
