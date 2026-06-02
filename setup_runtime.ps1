@@ -272,8 +272,20 @@ function Find-Python-Installation {
         }
     }
     
+    # Determine the Scoop root: prefer $env:SCOOP, then $env:SCOOP_GLOBAL,
+    # otherwise fall back to the per-user default under the current profile.
+    # (Never hardcode a specific user's profile path.)
+    $SCOOP_ROOT = if (-not [string]::IsNullOrEmpty($env:SCOOP)) {
+        $env:SCOOP
+    } elseif (-not [string]::IsNullOrEmpty($env:SCOOP_GLOBAL)) {
+        $env:SCOOP_GLOBAL
+    } else {
+        Join-Path $env:USERPROFILE "scoop"
+    }
+    $SCOOP_APPS = Join-Path $SCOOP_ROOT "apps"
+
     # Try common Scoop installation (miniconda3-py311)
-    $SCOOP_CURRENT = "C:\Users\jonib\scoop\apps\miniconda3-py311\current"
+    $SCOOP_CURRENT = Join-Path $SCOOP_APPS "miniconda3-py311\current"
     if (Test-Path $SCOOP_CURRENT) {
         $hasPython = (Test-Path "$SCOOP_CURRENT\python311.dll") -or (Test-Path "$SCOOP_CURRENT\Lib")
         if ($hasPython) {
@@ -282,7 +294,6 @@ function Find-Python-Installation {
     }
     
     # Try to find any Python 3.11 in Scoop apps
-    $SCOOP_APPS = "C:\Users\jonib\scoop\apps"
     if (Test-Path $SCOOP_APPS) {
         $pythonDirs = @(Get-ChildItem -Path $SCOOP_APPS -Filter "*python*" -Directory -ErrorAction SilentlyContinue)
         foreach ($dir in $pythonDirs) {
