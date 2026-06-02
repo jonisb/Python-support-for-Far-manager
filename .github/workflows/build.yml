@@ -71,23 +71,29 @@ jobs:
     
     - name: Setup python_runtime
       run: |
-        $pythonDir = python -c "import sys; print(sys.prefix)"
-        $dest = "build\Release\python_runtime"
-        
+        # Use the exact Python that setup-python installed and CMake linked against
+        $pythonDir = $env:Python3_ROOT_DIR
+        if (-not $pythonDir) {
+            $pythonDir = & python -c "import sys; print(sys.prefix)"
+        }
         Write-Host "Python prefix: $pythonDir"
+        Write-Host "python.exe: $(& python -c 'import sys; print(sys.executable)')"
+        Write-Host "Python version: $(& python --version)"
         
+        $dest = "build\Release\python_runtime"
         New-Item -ItemType Directory -Force -Path "$dest\DLLs" | Out-Null
         New-Item -ItemType Directory -Force -Path "$dest\Lib" | Out-Null
         New-Item -ItemType Directory -Force -Path "$dest\site-packages" | Out-Null
         
-        Write-Host "Copying DLLs..."
-        Get-ChildItem "$pythonDir" -File | Where-Object { $_.Extension -in @(".dll") } |
+        Write-Host "Copying DLLs from $pythonDir ..."
+        Get-ChildItem "$pythonDir" -File | Where-Object { $_.Extension -eq ".dll" } |
             ForEach-Object { Copy-Item $_.FullName "$dest\DLLs\" -Force }
-        Get-ChildItem "$pythonDir\DLLs" -File | Where-Object { $_.Extension -in @(".dll",".pyd") } |
+        Get-ChildItem "$pythonDir\DLLs" -ErrorAction SilentlyContinue -File |
+            Where-Object { $_.Extension -in @(".dll", ".pyd") } |
             ForEach-Object { Copy-Item $_.FullName "$dest\DLLs\" -Force }
         
-        Write-Host "Copying Lib..."
-        Copy-Item "$pythonDir\Lib\*" "$dest\Lib\" -Recurse -Force
+        Write-Host "Copying Lib from $pythonDir\Lib ..."
+        Copy-Item "$pythonDir\Lib\*" "$dest\Lib\" -Recurse -Force -Exclude "__pycache__"
         
         Write-Host "python_runtime setup complete."
       shell: pwsh
