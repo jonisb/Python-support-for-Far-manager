@@ -80,4 +80,10 @@ jobs:
           python/far_struct_offsets.json
         retention-days: 30
     
-
+    - name: Upload log files
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: pythonfar-logs-${{ matrix.arch }}
+        path: ${{ runner.temp }}/pythonfar_*.log
+        retention-days: 30
