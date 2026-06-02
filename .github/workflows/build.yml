@@ -15,7 +15,13 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        architecture: [x64, x86]
+        include:
+          - arch: x64
+            cmake_platform: x64
+            python_arch: x64
+          - arch: x86
+            cmake_platform: Win32
+            python_arch: x86
     
     steps:
     - uses: actions/checkout@v6
@@ -31,7 +37,7 @@ jobs:
     - name: Configure CMake
       run: |
         cd build
-        cmake .. -G "Visual Studio 17 2022" -A ${{ matrix.architecture }}
+        cmake .. -G "Visual Studio 17 2022" -A ${{ matrix.cmake_platform }}
       shell: cmd
     
     - name: Build Release
@@ -49,7 +55,7 @@ jobs:
     - name: Upload DLL artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: pythonfar-dlls-${{ matrix.architecture }}
+        name: pythonfar-dlls-${{ matrix.arch }}
         path: |
           build/Release/PythonFar.dll
           build/Release/PythonFar.adapter.dll
