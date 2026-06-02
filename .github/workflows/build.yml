@@ -27,13 +27,19 @@ jobs:
     - uses: actions/checkout@v6
     
     - name: Set up Python 3.11 (${{ matrix.arch }})
-      uses: actions/setup-python@v4
+      if: matrix.arch == 'x64'
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
-        architecture: ${{ matrix.python_arch }}
-    
-    - name: Verify Python architecture
-      run: python -c "import struct; arch='64' if struct.calcsize('P')==8 else '32'; print(f'Python {arch}-bit'); exit(0 if (arch=='64')==('${{ matrix.arch }}'=='x64') else 1)"
+        architecture: x64
+
+    - name: Set up Python 3.11 (x86 manual install)
+      if: matrix.arch == 'x86'
+      run: |
+        curl -L -o python-3.11.9-x86.exe https://www.python.org/ftp/python/3.11.9/python-3.11.9.exe
+        python-3.11.9-x86.exe /quiet InstallAllUsers=0 TargetDir=C:\Python311-x86 Include_test=0
+        echo "C:\Python311-x86" >> %GITHUB_PATH%
+        echo "Python3_ROOT_DIR=C:\Python311-x86" >> %GITHUB_ENV%
       shell: cmd
     
     - name: Set up Visual Studio
@@ -42,12 +48,9 @@ jobs:
         vs-version: '17.0'
     
     - name: Create build directory
-      run: mkdir -p build
-    
-    - name: Configure CMake
       run: |
-        cd build
-        cmake .. -G "Visual Studio 17 2022" -A ${{ matrix.cmake_platform }}
+        mkdir -p build
+        mkdir -p logs
       shell: cmd
     
     - name: Build Release
@@ -78,12 +81,20 @@ jobs:
         dir "%USERPROFILE%\AppData\Local\Temp\pythonfar_*.log" 2>nul || echo "No logs found in AppData"
       shell: cmd
     
+    - name: Copy logs to workspace
+      if: always()
+      run: |
+        copy "%TEMP%\pythonfar_*.log" logs\ 2>nul
+        copy "%USERPROFILE%\AppData\Local\Temp\pythonfar_*.log" logs\ 2>nul
+        dir logs\
+      shell: cmd
+    
     - name: Upload log files
       if: always()
       uses: actions/upload-artifact@v4
       with:
         name: pythonfar-logs-${{ matrix.arch }}
-        path: C:\Users\runneradmin\AppData\Local\Temp\pythonfar_*.log
+        path: logs\*.log
         if-no-files-found: ignore
     
     - name: Upload DLL artifacts
