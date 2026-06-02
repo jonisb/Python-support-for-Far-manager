@@ -17,10 +17,9 @@ if(EXISTS "${PYTHONFAR_PYTHON_SDK}/include/Python.h")
     set(Python3_FIND_REGISTRY NEVER)
 endif()
 
-# Detect cross-compilation: when building for a target whose python.exe cannot
-# run on the host (e.g. building ARM64 binaries on an x64 runner), we must NOT
-# require the Interpreter component (CMake would try to execute it) and we must
-# skip running host-incompatible POST_BUILD tools (struct_dumper).
+# Detect cross-compilation: when building for a target whose produced binaries
+# cannot run on the host (e.g. ARM64 on an x64 runner), skip host-incompatible
+# POST_BUILD tools (struct_dumper).
 set(PYTHONFAR_CROSS_BUILD OFF)
 if(CMAKE_GENERATOR_PLATFORM AND CMAKE_HOST_SYSTEM_PROCESSOR)
     string(TOLOWER "${CMAKE_GENERATOR_PLATFORM}" _pf_target)
@@ -36,17 +35,16 @@ if(CMAKE_GENERATOR_PLATFORM AND CMAKE_HOST_SYSTEM_PROCESSOR)
     # x86 (Win32) binaries still run on x64 hosts, so that is not a cross build.
     if(NOT _pf_target STREQUAL _pf_host AND NOT (_pf_target STREQUAL "win32" AND _pf_host STREQUAL "x64"))
         set(PYTHONFAR_CROSS_BUILD ON)
-        message(STATUS "Cross-build detected: target=${_pf_target} host=${_pf_host} (Interpreter optional, host tools skipped)")
+        message(STATUS "Cross-build detected: target=${_pf_target} host=${_pf_host} (host tools skipped)")
     endif()
 endif()
 
-# Find Python. Development is always required; the Interpreter is only required
-# for native builds (it cannot run when cross-compiling).
-if(PYTHONFAR_CROSS_BUILD)
-    find_package(Python3 REQUIRED COMPONENTS Development)
-else()
-    find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
-endif()
+# Find Python development artifacts only. The build links against the
+# self-contained SDK from setup_python.ps1 and does not need to execute
+# python.exe. Requiring Interpreter makes CMake search hosted/system Python
+# (for example GitHub's Python 3.13 ARM64), which can mismatch the pinned
+# 3.11.9 SDK/runtime and break ARM64 jobs.
+find_package(Python3 REQUIRED COMPONENTS Development)
 
 # Add include directories
 include_directories(include)
