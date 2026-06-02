@@ -10,6 +10,10 @@
 
 namespace PythonFar {
 
+// Logging Configuration
+// Default temp directory fallback (when TEMP env var is not set)
+static const char* DEFAULT_TEMP_DIR = "C:\\temp";
+
 // Safe environment variable getter (replaces unsafe getenv)
 inline std::string SafeGetEnv(const char* name, const std::string& defaultValue = "") {
     char* value = nullptr;
@@ -82,7 +86,8 @@ public:
 private:
     Logger() {
         // Default log file - use safe environment variable getter
-        std::string tempDir = SafeGetEnv("TEMP", "C:\\temp");
+        // DEFAULT_TEMP_DIR is defined in GlobalInfo.hpp and accessible in this namespace
+        std::string tempDir = SafeGetEnv("TEMP", DEFAULT_TEMP_DIR);
         std::string logPath = tempDir + "\\pythonfar_loader.log";
         m_logFile.open(logPath, std::ios::app);
         

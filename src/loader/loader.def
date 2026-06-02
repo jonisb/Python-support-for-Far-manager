@@ -1,0 +1,15 @@
+EXPORTS
+; Standard Far Manager Plugin API
+GetGlobalInfoW
+GetPluginInfoW
+SetStartupInfoW
+OpenW
+
+; Adapter Loader API
+Initialize = loader_Initialize
+IsPlugin = loader_IsPlugin
+CreateInstance = loader_CreateInstance
+GetFunctionAddress = loader_GetFunctionAddress
+GetError = loader_GetError
+DestroyInstance = loader_DestroyInstance
+Free = loader_Free
