@@ -57,7 +57,7 @@ jobs:
       shell: cmd
     
     - name: Copy test plugin
-      run: copy python\test_plugin.far.py build\Release\test_plugin.far.py
+      run: copy python\test_plugin.far.py build\Release\python\test_plugin.far.py
       shell: cmd
     
     - name: Run tests
