@@ -5,6 +5,7 @@
 #include <unordered_set>
 #include <thread>
 #include <chrono>
+#include <mutex>
 
 static PluginStartupInfo g_BridgeStartupInfo = {};
 static FarStandardFunctions g_BridgeFSF = {};
@@ -23,6 +24,12 @@ extern "C" {
     }
 }
 
+// g_PendingCloseDialogs is mutated from a detached timeout worker thread
+// (insert) and read/cleared on Far's main thread (erase / swap+clear in the
+// ACTL_SYNCHRO handler). std::unordered_set is not thread-safe, so every
+// access must be guarded by g_SynchroMutex to avoid a data race. Far API
+// calls (SendDlgMessage) are deliberately performed OUTSIDE the lock.
+static std::mutex g_SynchroMutex;
 static std::unordered_set<HANDLE> g_PendingCloseDialogs;
 
 static void BridgeLog(const char* message) {
@@ -93,7 +100,10 @@ extern "C" __declspec(dllexport) intptr_t WINAPI PythonFar_DialogRunWithTimeout(
 
         if (shouldClose) {
             HANDLE dialogToClose = hDlg;
-            g_PendingCloseDialogs.insert(dialogToClose);
+            {
+                std::lock_guard<std::mutex> lock(g_SynchroMutex);
+                g_PendingCloseDialogs.insert(dialogToClose);
+            }
             if (g_BridgeValid && g_BridgeStartupInfo.AdvControl) {
                 g_BridgeStartupInfo.AdvControl(&pluginGuid, ACTL_SYNCHRO, 0, nullptr);
             }
@@ -101,7 +111,10 @@ extern "C" __declspec(dllexport) intptr_t WINAPI PythonFar_DialogRunWithTimeout(
     }).detach();
 
     intptr_t result = g_BridgeStartupInfo.DialogRun(hDlg);
-    g_PendingCloseDialogs.erase(hDlg);
+    {
+        std::lock_guard<std::mutex> lock(g_SynchroMutex);
+        g_PendingCloseDialogs.erase(hDlg);
+    }
     return result;
 }
 
@@ -197,8 +210,11 @@ extern "C" __declspec(dllexport) intptr_t WINAPI PythonFar_SettingsControl(
 
 extern "C" __declspec(dllexport) void WINAPI PythonFar_ProcessSynchroEvent(const GUID* PluginId) {
     if (g_BridgeValid && g_BridgeStartupInfo.SendDlgMessage) {
-        auto toClose = g_PendingCloseDialogs;
-        g_PendingCloseDialogs.clear();
+        std::unordered_set<HANDLE> toClose;
+        {
+            std::lock_guard<std::mutex> lock(g_SynchroMutex);
+            toClose.swap(g_PendingCloseDialogs);
+        }
         for (const auto hDlg : toClose) {
             g_BridgeStartupInfo.SendDlgMessage(hDlg, DM_CLOSE, -1, nullptr);
         }
