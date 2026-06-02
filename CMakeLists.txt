@@ -15,6 +15,8 @@ include_directories(${Python3_INCLUDE_DIRS})
 add_library(PythonFar SHARED
     src/loader/loader.cpp
     src/loader/interface.cpp
+    src/loader/dllmain.cpp
+    src/logger.cpp
 )
 target_link_libraries(PythonFar ${Python3_LIBRARIES})
 set_target_properties(PythonFar PROPERTIES
@@ -31,6 +33,7 @@ add_library(PythonFar.adapter SHARED
     src/adapter/plugin_functions.cpp
     src/adapter/bridges.cpp
     src/adapter/adapter.def
+    src/logger.cpp
 )
 target_link_libraries(PythonFar.adapter ${Python3_LIBRARIES})
 set_target_properties(PythonFar.adapter PROPERTIES
@@ -54,13 +57,19 @@ enable_testing()
 add_executable(pythonfar_tests
     tests/test_main.cpp
     tests/test_loader.cpp
+    tests/test_adapter.cpp
 )
-target_include_directories(pythonfar_tests PRIVATE src/loader)
+target_include_directories(pythonfar_tests PRIVATE src/loader src/adapter)
 target_link_libraries(pythonfar_tests
     gtest_main
+    ${Python3_LIBRARIES}
 )
 
 add_test(NAME PythonFarTests 
          COMMAND pythonfar_tests
          WORKING_DIRECTORY "$<TARGET_FILE_DIR:pythonfar_tests>")
-
+# ===== Install =====
+install(TARGETS PythonFar PythonFar.adapter
+    RUNTIME DESTINATION .
+    LIBRARY DESTINATION .
+)
