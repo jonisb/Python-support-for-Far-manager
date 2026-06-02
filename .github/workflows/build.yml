@@ -83,9 +83,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: pythonfar-logs-${{ matrix.arch }}
-        path: |
-          ${{ env.TEMP }}/pythonfar_*.log
-          ${{ runner.temp }}/pythonfar_*.log
+        path: ${{ runner.temp }}\pythonfar_*.log
         if-no-files-found: ignore
     
     - name: Upload DLL artifacts
