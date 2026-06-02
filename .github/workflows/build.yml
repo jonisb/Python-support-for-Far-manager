@@ -37,10 +37,11 @@ jobs:
       if: matrix.arch == 'x86'
       run: |
         curl -L -o python-3.11.9-x86.exe https://www.python.org/ftp/python/3.11.9/python-3.11.9.exe
-        python-3.11.9-x86.exe /quiet InstallAllUsers=0 TargetDir=C:\Python311-x86 Include_test=0
-        echo "C:\Python311-x86" >> %GITHUB_PATH%
-        echo "Python3_ROOT_DIR=C:\Python311-x86" >> %GITHUB_ENV%
-      shell: cmd
+        Start-Process -Wait -FilePath "python-3.11.9-x86.exe" -ArgumentList "/quiet InstallAllUsers=0 TargetDir=C:\Python311-x86 Include_test=0"
+        echo "C:\Python311-x86" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        echo "Python3_ROOT_DIR=C:\Python311-x86" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        Write-Host "Python installed: $(Test-Path 'C:\Python311-x86\python311.dll')"
+      shell: pwsh
     
     - name: Set up Visual Studio
       uses: microsoft/setup-msbuild@v2
