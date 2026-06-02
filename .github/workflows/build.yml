@@ -70,6 +70,24 @@ jobs:
         ctest --output-on-failure -C Release
       shell: cmd
     
+    - name: Find log files
+      if: always()
+      run: |
+        echo "TEMP=%TEMP%"
+        dir "%TEMP%\pythonfar_*.log" 2>nul || echo "No logs found in TEMP"
+        dir "%USERPROFILE%\AppData\Local\Temp\pythonfar_*.log" 2>nul || echo "No logs found in AppData"
+      shell: cmd
+    
+    - name: Upload log files
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: pythonfar-logs-${{ matrix.arch }}
+        path: |
+          ${{ env.TEMP }}/pythonfar_*.log
+          ${{ runner.temp }}/pythonfar_*.log
+        if-no-files-found: ignore
+    
     - name: Upload DLL artifacts
       uses: actions/upload-artifact@v4
       with:
@@ -80,10 +98,3 @@ jobs:
           python/far_struct_offsets.json
         retention-days: 30
     
-    - name: Upload log files
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: pythonfar-logs-${{ matrix.arch }}
-        path: ${{ runner.temp }}/**/pythonfar_*.log
-        if-no-files-found: ignore
