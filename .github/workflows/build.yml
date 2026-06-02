@@ -78,22 +78,17 @@ jobs:
     
     - name: Diagnose Python versions
       run: |
-        Write-Host "=== Python3_ROOT_DIR (used by setup_runtime -UseFallback) ==="
-        Write-Host "$env:Python3_ROOT_DIR"
-        $rootDll = Get-Item "$env:Python3_ROOT_DIR\python311.dll" -ErrorAction SilentlyContinue
-        Write-Host "  python311.dll version: $($rootDll.VersionInfo.ProductVersion)  size: $($rootDll.Length)"
+        Write-Host "=== _sre.MAGIC from the linked python (Python3_ROOT_DIR) ==="
+        & "$env:Python3_ROOT_DIR\python.exe" -c "import _sre, re._constants as c; print('dll _sre.MAGIC =', _sre.MAGIC); print('lib _constants.MAGIC =', c.MAGIC)"
         
-        Write-Host "=== python_runtime\DLLs\python311.dll (linked + loaded) ==="
-        $rtDll = Get-Item "build\Release\python_runtime\DLLs\python311.dll" -ErrorAction SilentlyContinue
-        Write-Host "  version: $($rtDll.VersionInfo.ProductVersion)  size: $($rtDll.Length)"
+        Write-Host "=== _constants.py copied into python_runtime ==="
+        Get-Content "build\Release\python_runtime\Lib\re\_constants.py" | Select-String "^MAGIC"
         
-        Write-Host "=== build\Release\python311.dll (next to test exe, if any) ==="
-        $exeDll = Get-Item "build\Release\python311.dll" -ErrorAction SilentlyContinue
-        if ($exeDll) { Write-Host "  version: $($exeDll.VersionInfo.ProductVersion)  size: $($exeDll.Length)" }
-        else { Write-Host "  (not present)" }
-        
-        Write-Host "=== _compiler.py version source ==="
-        Get-Content "build\Release\python_runtime\Lib\re\_constants.py" | Select-String "MAGIC" | Select-Object -First 3
+        Write-Host "=== compare _constants.py files ==="
+        $a = "$env:Python3_ROOT_DIR\Lib\re\_constants.py"
+        $b = "build\Release\python_runtime\Lib\re\_constants.py"
+        Write-Host "root: $((Get-FileHash $a).Hash)"
+        Write-Host "rt:   $((Get-FileHash $b).Hash)"
       shell: pwsh
     
     - name: Run tests
