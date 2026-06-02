@@ -598,8 +598,9 @@ static std::wstring Utf8ToWideStr(const char* utf8) {
     if (!utf8) return std::wstring();
     int len = MultiByteToWideChar(CP_UTF8, 0, utf8, -1, nullptr, 0);
     if (len <= 0) return std::wstring();
-    std::wstring ws(static_cast<size_t>(len - 1), L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, utf8, -1, &ws[0], len);
+    std::wstring ws(static_cast<size_t>(len), L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, utf8, -1, ws.data(), len);
+    if (!ws.empty()) ws.pop_back();
     return ws;
 }
 
