@@ -53,6 +53,12 @@ jobs:
         if not exist logs mkdir logs
       shell: cmd
     
+    - name: Configure CMake
+      run: |
+        cd build
+        cmake .. -G "Visual Studio 17 2022" -A ${{ matrix.cmake_platform }}
+      shell: cmd
+    
     - name: Build Release
       run: |
         cd build
