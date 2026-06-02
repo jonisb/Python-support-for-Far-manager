@@ -53,10 +53,16 @@ jobs:
         if not exist logs mkdir logs
       shell: cmd
     
+    - name: Setup python_runtime
+      run: |
+        $env:PYTHON_HOME = $env:Python3_ROOT_DIR
+        .\setup_runtime.ps1 -BuildDir "build\Release" -UseFallback
+      shell: pwsh
+    
     - name: Configure CMake
       run: |
         cd build
-        cmake .. -G "Visual Studio 17 2022" -A ${{ matrix.cmake_platform }}
+        cmake .. -G "Visual Studio 17 2022" -A ${{ matrix.cmake_platform }} -DPython3_ROOT_DIR="build\Release\python_runtime\DLLs"
       shell: cmd
     
     - name: Build Release
@@ -68,12 +74,6 @@ jobs:
     - name: Create python directory
       run: mkdir build\Release\python
       shell: cmd
-    
-    - name: Setup python_runtime
-      run: |
-        $env:PYTHON_HOME = $env:Python3_ROOT_DIR
-        .\setup_runtime.ps1 -BuildDir "build\Release" -UseFallback
-      shell: pwsh
     
     - name: Copy test plugin
       run: copy python\test_plugin.far.py build\Release\test_plugin.far.py
