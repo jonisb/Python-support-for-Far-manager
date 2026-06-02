@@ -312,15 +312,19 @@ std::unique_ptr<PluginModule> PythonFarAdapter::CreatePluginModule(const wchar_t
 
         LOG_TRACE("Full file path: " + filenameNarrow);
 
-        // Check if the file exists using std::ifstream
+        // Check if the file exists. Use the wide path with the Win32 API:
+        // a narrow std::ifstream interprets its path in the current ANSI code
+        // page (not UTF-8), so a UTF-8 path with non-ASCII characters would
+        // fail to open on runners whose ACP differs (e.g. CI), even though the
+        // file exists. GetFileAttributesW is encoding-correct on all systems.
         {
-            std::ifstream f(filenameNarrow.c_str());
-            if (!f.good()) {
+            DWORD attrs = GetFileAttributesW(filename);
+            if (attrs == INVALID_FILE_ATTRIBUTES || (attrs & FILE_ATTRIBUTE_DIRECTORY)) {
                 LOG_TRACE("File does not exist: " + filenameNarrow);
                 m_ErrorSummary = L"Load Error";
                 std::wstring wideFilename = PythonFar::UTF8ToWide(filenameNarrow);
                 m_ErrorDescription = L"File not found: " + wideFilename;
-                
+
                 return nullptr;
             }
         }

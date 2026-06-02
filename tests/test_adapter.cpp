@@ -4,6 +4,7 @@
 #include <vector>
 #include <fstream>
 #include "plugin.hpp"
+#include "common_log.hpp"
 
 // Function pointers for adapter.dll exports
 typedef BOOL (WINAPI *InitializeFunc)(GlobalInfo* Info);
@@ -289,9 +290,32 @@ TEST_F(AdapterTestFixture, CreateInstance_NonAsciiPathLoads) {
     };
     std::wstring path = WritePlugin(fileName, ValidPluginSource("Cyrillic Plugin"));
 
+    DWORD attrs = GetFileAttributesW(path.c_str());
+    ASSERT_NE(attrs, INVALID_FILE_ATTRIBUTES)
+        << "Test fixture was not created at path: " << PythonFar::WideToUTF8(path.c_str());
+
     EXPECT_TRUE(isPluginFunc(path.c_str()));
     HANDLE instance = createInstanceFunc(path.c_str());
-    ASSERT_NE(instance, nullptr) << "Failed to load plugin from non-ASCII path";
+    if (!instance || instance == INVALID_HANDLE_VALUE) {
+        std::string details = "No adapter error details available";
+        GetErrorFunc getErrorFunc =
+            reinterpret_cast<GetErrorFunc>(GetProcAddress(hAdapter, "adapter_GetError"));
+        if (getErrorFunc) {
+            ErrorInfo err = {};
+            err.StructSize = sizeof(ErrorInfo);
+            if (getErrorFunc(&err)) {
+                details.clear();
+                if (err.Summary) {
+                    details += "Summary: " + PythonFar::WideToUTF8(err.Summary) + "\n";
+                }
+                if (err.Description) {
+                    details += "Description: " + PythonFar::WideToUTF8(err.Description);
+                }
+            }
+        }
+        FAIL() << "Failed to load plugin from non-ASCII path: "
+               << PythonFar::WideToUTF8(path.c_str()) << "\n" << details;
+    }
     ASSERT_NE(instance, INVALID_HANDLE_VALUE);
 
     typedef void (WINAPI *GetPluginInfoWFunc)(PluginInfo*);
