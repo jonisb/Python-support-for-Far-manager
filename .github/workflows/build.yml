@@ -76,6 +76,26 @@ jobs:
       run: copy python\test_plugin.far.py build\Release\test_plugin.far.py
       shell: cmd
     
+    - name: Diagnose Python versions
+      run: |
+        Write-Host "=== Python3_ROOT_DIR (used by setup_runtime -UseFallback) ==="
+        Write-Host "$env:Python3_ROOT_DIR"
+        $rootDll = Get-Item "$env:Python3_ROOT_DIR\python311.dll" -ErrorAction SilentlyContinue
+        Write-Host "  python311.dll version: $($rootDll.VersionInfo.ProductVersion)  size: $($rootDll.Length)"
+        
+        Write-Host "=== python_runtime\DLLs\python311.dll (linked + loaded) ==="
+        $rtDll = Get-Item "build\Release\python_runtime\DLLs\python311.dll" -ErrorAction SilentlyContinue
+        Write-Host "  version: $($rtDll.VersionInfo.ProductVersion)  size: $($rtDll.Length)"
+        
+        Write-Host "=== build\Release\python311.dll (next to test exe, if any) ==="
+        $exeDll = Get-Item "build\Release\python311.dll" -ErrorAction SilentlyContinue
+        if ($exeDll) { Write-Host "  version: $($exeDll.VersionInfo.ProductVersion)  size: $($exeDll.Length)" }
+        else { Write-Host "  (not present)" }
+        
+        Write-Host "=== _compiler.py version source ==="
+        Get-Content "build\Release\python_runtime\Lib\re\_constants.py" | Select-String "MAGIC" | Select-Object -First 3
+      shell: pwsh
+    
     - name: Run tests
       run: |
         cd build
