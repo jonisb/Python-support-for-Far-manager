@@ -243,3 +243,112 @@ TEST_F(LoaderDialogTimeoutTest, ZeroTimeoutDoesNotScheduleClose) {
     std::lock_guard<std::mutex> lock(g_ClosedMutex);
     EXPECT_TRUE(g_ClosedDialogs.empty());
 }
+
+// ===========================================================================
+// Command-line UI feedback.
+//
+// OpenW(OPEN_COMMANDLINE) handles "py:..." commands typed at Far's command
+// line and is supposed to show a message box with the result. A previous bug
+// computed `showUI = Info->OpenFrom != OPEN_COMMANDLINE` *inside* the
+// OPEN_COMMANDLINE branch, so showUI was always false and every message box
+// was dead code. These tests install a non-modal hook and assert the message
+// is actually emitted.
+// ===========================================================================
+
+typedef void (*ShowMessageBoxFn)(const char*, const char*, unsigned int);
+
+static std::mutex g_MsgMutex;
+static int g_MsgCount = 0;
+static std::string g_LastMsgText;
+static std::string g_LastMsgCaption;
+
+static void CapturingMessageHook(const char* text, const char* caption, unsigned int type) {
+    std::lock_guard<std::mutex> lock(g_MsgMutex);
+    g_MsgCount++;
+    g_LastMsgText = text ? text : "";
+    g_LastMsgCaption = caption ? caption : "";
+}
+
+class LoaderCommandLineUITest : public ::testing::Test {
+protected:
+    HMODULE hLoader = nullptr;
+    HANDLE (WINAPI *openW)(const OpenInfo*) = nullptr;
+    ShowMessageBoxFn (WINAPI *setHook)(ShowMessageBoxFn) = nullptr;
+
+    void SetUp() override {
+        hLoader = LoadLibraryW(L"PythonFar.dll");
+        ASSERT_NE(hLoader, nullptr);
+
+        openW = reinterpret_cast<HANDLE (WINAPI*)(const OpenInfo*)>(
+            GetProcAddress(hLoader, "OpenW"));
+        setHook = reinterpret_cast<ShowMessageBoxFn (WINAPI*)(ShowMessageBoxFn)>(
+            GetProcAddress(hLoader, "PythonFar_TestSetMessageBoxHook"));
+        ASSERT_NE(openW, nullptr);
+        ASSERT_NE(setHook, nullptr) << "Message-box test hook export missing";
+
+        {
+            std::lock_guard<std::mutex> lock(g_MsgMutex);
+            g_MsgCount = 0;
+            g_LastMsgText.clear();
+            g_LastMsgCaption.clear();
+        }
+        setHook(&CapturingMessageHook);  // intercept message boxes
+    }
+
+    void TearDown() override {
+        if (setHook) setHook(nullptr);   // restore default MessageBoxA
+        if (hLoader) FreeLibrary(hLoader);
+    }
+
+    // Invoke OpenW as if the user typed `commandLine` at Far's command line.
+    HANDLE RunCommandLine(const wchar_t* commandLine) {
+        OpenCommandLineInfo cmd = { sizeof(OpenCommandLineInfo) };
+        cmd.CommandLine = commandLine;
+        OpenInfo info = { sizeof(OpenInfo) };
+        info.OpenFrom = OPEN_COMMANDLINE;
+        info.Guid = nullptr;
+        info.Data = reinterpret_cast<intptr_t>(&cmd);
+        info.Instance = nullptr;
+        return openW(&info);
+    }
+};
+
+// Regression: `py:loaded` from the command line must show a message box.
+// With the old bug (showUI always false) no message would be emitted.
+TEST_F(LoaderCommandLineUITest, LoadedCommandShowsMessage) {
+    HANDLE result = RunCommandLine(L"py:loaded");
+    EXPECT_EQ(reinterpret_cast<intptr_t>(result), 1) << "Command should be handled";
+
+    std::lock_guard<std::mutex> lock(g_MsgMutex);
+    EXPECT_EQ(g_MsgCount, 1) << "A message box should be shown for an interactive command";
+    EXPECT_EQ(g_LastMsgCaption, std::string("PythonFar Loaded Plugins"));
+    EXPECT_NE(g_LastMsgText.find("Loaded Python plugins"), std::string::npos);
+}
+
+// `py:list` from the command line must also show a message box.
+TEST_F(LoaderCommandLineUITest, ListCommandShowsMessage) {
+    HANDLE result = RunCommandLine(L"py:list");
+    EXPECT_EQ(reinterpret_cast<intptr_t>(result), 1);
+
+    std::lock_guard<std::mutex> lock(g_MsgMutex);
+    EXPECT_EQ(g_MsgCount, 1) << "py:list should show a message box";
+    EXPECT_EQ(g_LastMsgCaption, std::string("PythonFar Plugin List"));
+}
+
+// An unknown command must NOT show a message box and must not be "handled".
+TEST_F(LoaderCommandLineUITest, UnknownCommandShowsNoMessage) {
+    HANDLE result = RunCommandLine(L"py:definitely_not_a_command");
+    EXPECT_EQ(result, nullptr) << "Unknown command should not be handled";
+
+    std::lock_guard<std::mutex> lock(g_MsgMutex);
+    EXPECT_EQ(g_MsgCount, 0) << "Unknown command must not show a message box";
+}
+
+// A wrong prefix (not "py") must be ignored entirely.
+TEST_F(LoaderCommandLineUITest, WrongPrefixIgnored) {
+    HANDLE result = RunCommandLine(L"notpy:loaded");
+    EXPECT_EQ(result, nullptr);
+
+    std::lock_guard<std::mutex> lock(g_MsgMutex);
+    EXPECT_EQ(g_MsgCount, 0);
+}

@@ -40,6 +40,32 @@ auto try_call(F&& function, E&& error_handler) noexcept {
 
 static Adapter g_Adapter;
 
+// ===== Message-box seam (testable) =====
+// All user-facing message boxes go through g_ShowMessageBox so tests can
+// install a non-modal hook and assert which messages would be shown. In
+// production this points at the real MessageBoxA wrapper below.
+typedef void (*ShowMessageBoxFn)(const char* text, const char* caption, unsigned int type);
+
+static void DefaultShowMessageBox(const char* text, const char* caption, unsigned int type) {
+    MessageBoxA(NULL, text, caption, type);
+}
+
+static ShowMessageBoxFn g_ShowMessageBox = &DefaultShowMessageBox;
+
+static void ShowMessage(const char* text, const char* caption, unsigned int type) {
+    if (g_ShowMessageBox) {
+        g_ShowMessageBox(text, caption, type);
+    }
+}
+
+// Test-only hook: install a custom message-box handler (pass nullptr to reset
+// to the default MessageBoxA behavior). Returns the previously installed hook.
+extern "C" __declspec(dllexport) ShowMessageBoxFn WINAPI PythonFar_TestSetMessageBoxHook(ShowMessageBoxFn hook) {
+    ShowMessageBoxFn previous = g_ShowMessageBox;
+    g_ShowMessageBox = hook ? hook : &DefaultShowMessageBox;
+    return previous;
+}
+
 // Helper to load a plugin by name
 static bool LoadPlugin(const std::string& pluginName) {
     LOG_TRACE("LoadPlugin: Attempting to load " << pluginName);
@@ -572,7 +598,7 @@ HANDLE WINAPI OpenW(const OpenInfo* Info) {
             msg += "  py:loaded  - List loaded plugins\n";
             msg += "  py:load <name>   - Load a plugin\n";
             msg += "  py:unload <name> - Unload a plugin\n";
-            MessageBoxA(NULL, msg.c_str(), "PythonFar", MB_OK | MB_ICONINFORMATION);
+            ShowMessage(msg.c_str(), "PythonFar", MB_OK | MB_ICONINFORMATION);
             return nullptr;
         }
         
@@ -676,8 +702,13 @@ HANDLE WINAPI OpenW(const OpenInfo* Info) {
             return nullptr;
         }
         
-        // Handle commands
-        const bool showUI = Info->OpenFrom != OPEN_COMMANDLINE;
+        // Handle commands.
+        // We are inside the OPEN_COMMANDLINE branch, i.e. the user typed a
+        // "py:..." command interactively at Far's command line, so show
+        // feedback (message boxes) for results and errors. (The previous
+        // `Info->OpenFrom != OPEN_COMMANDLINE` test was always false here,
+        // making every MessageBoxA below dead code.)
+        const bool showUI = true;
 
         if (command == "list") {
             LOG_TRACE("OpenW: Handling list command");
@@ -717,7 +748,7 @@ HANDLE WINAPI OpenW(const OpenInfo* Info) {
             }
             
             if (showUI) {
-                MessageBoxA(NULL, pluginList.c_str(), "PythonFar Plugin List", MB_OK);
+                ShowMessage(pluginList.c_str(), "PythonFar Plugin List", MB_OK);
             } else {
                 LOG_TRACE(pluginList);
             }
@@ -736,7 +767,7 @@ HANDLE WINAPI OpenW(const OpenInfo* Info) {
             }
             
             if (showUI) {
-                MessageBoxA(NULL, loadedList.c_str(), "PythonFar Loaded Plugins", MB_OK);
+                ShowMessage(loadedList.c_str(), "PythonFar Loaded Plugins", MB_OK);
             } else {
                 LOG_TRACE(loadedList);
             }
@@ -754,7 +785,7 @@ HANDLE WINAPI OpenW(const OpenInfo* Info) {
                 if (!g_Adapter.ModuleInit() || !g_Adapter.Initialize(&gi)) {
                     if (showUI) {
                         std::string msg = "Failed to initialize PythonFar adapter. Make sure " + std::string(WideToUTF8(PythonFar::ADAPTER_DLL_NAME)) + " is in the Adapters directory.";
-                        MessageBoxA(NULL, msg.c_str(), "PythonFar Error", MB_OK | MB_ICONERROR);
+                        ShowMessage(msg.c_str(), "PythonFar Error", MB_OK | MB_ICONERROR);
                     }
                     return nullptr;
                 }
@@ -764,7 +795,7 @@ HANDLE WINAPI OpenW(const OpenInfo* Info) {
             // Check if plugin is already loaded
             if (g_LoadedPlugins.find(pluginName) != g_LoadedPlugins.end()) {
                 if (showUI) {
-                    MessageBoxA(NULL, ("Plugin '" + pluginName + "' is already loaded!").c_str(), "PythonFar", MB_OK | MB_ICONWARNING);
+                    ShowMessage(("Plugin '" + pluginName + "' is already loaded!").c_str(), "PythonFar", MB_OK | MB_ICONWARNING);
                 }
                 return (HANDLE)1;
             }
@@ -807,7 +838,7 @@ HANDLE WINAPI OpenW(const OpenInfo* Info) {
                 LOG_TRACE("OpenW: Plugin '" << pluginName << "' loaded successfully (instance: " 
                           << reinterpret_cast<uintptr_t>(instance) << ")");
                 if (showUI) {
-                    MessageBoxA(NULL, ("Plugin '" + pluginName + "' loaded successfully!").c_str(), "PythonFar", MB_OK | MB_ICONINFORMATION);
+                    ShowMessage(("Plugin '" + pluginName + "' loaded successfully!").c_str(), "PythonFar", MB_OK | MB_ICONINFORMATION);
                 }
             } else {
                 // Get detailed error information
@@ -835,7 +866,7 @@ HANDLE WINAPI OpenW(const OpenInfo* Info) {
                 }
                 
                 if (showUI) {
-                    MessageBoxA(NULL, errorMsg.c_str(), "PythonFar Error", MB_OK | MB_ICONERROR);
+                    ShowMessage(errorMsg.c_str(), "PythonFar Error", MB_OK | MB_ICONERROR);
                 }
                 LOG_TRACE("OpenW: Failed to create plugin instance");
             }
@@ -851,7 +882,7 @@ HANDLE WINAPI OpenW(const OpenInfo* Info) {
             auto it = g_LoadedPlugins.find(pluginName);
             if (it == g_LoadedPlugins.end()) {
                 if (showUI) {
-                    MessageBoxA(NULL, ("Plugin '" + pluginName + "' is not loaded!").c_str(), "PythonFar", MB_OK | MB_ICONWARNING);
+                    ShowMessage(("Plugin '" + pluginName + "' is not loaded!").c_str(), "PythonFar", MB_OK | MB_ICONWARNING);
                 }
                 return (HANDLE)1;
             }
@@ -860,12 +891,12 @@ HANDLE WINAPI OpenW(const OpenInfo* Info) {
             if (g_Adapter.DestroyInstance(it->second)) {
                 g_LoadedPlugins.erase(it);
                 if (showUI) {
-                    MessageBoxA(NULL, ("Plugin '" + pluginName + "' unloaded successfully!").c_str(), "PythonFar", MB_OK | MB_ICONINFORMATION);
+                    ShowMessage(("Plugin '" + pluginName + "' unloaded successfully!").c_str(), "PythonFar", MB_OK | MB_ICONINFORMATION);
                 }
                 LOG_TRACE("OpenW: Plugin unloaded successfully");
             } else {
                 if (showUI) {
-                    MessageBoxA(NULL, ("Failed to unload plugin '" + pluginName + "'").c_str(), "PythonFar", MB_OK | MB_ICONERROR);
+                    ShowMessage(("Failed to unload plugin '" + pluginName + "'").c_str(), "PythonFar", MB_OK | MB_ICONERROR);
                 }
                 LOG_TRACE("OpenW: Failed to destroy plugin instance");
             }
