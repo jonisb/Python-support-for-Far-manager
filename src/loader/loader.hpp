@@ -3,6 +3,7 @@
 #include <windows.h>
 #include <string>
 #include <memory>
+#include <type_traits>
 #include "../../include/plugin.hpp"
 
 // Module deleter for unique_ptr
