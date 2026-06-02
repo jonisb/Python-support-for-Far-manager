@@ -107,13 +107,22 @@ private:
 Logger& GetLoaderLogger();
 Logger& GetAdapterLogger();
 
-// Utility function for converting wide strings to UTF-8 for logging
+// Convert a UTF-16 wide string to a proper UTF-8 byte string.
+// NOTE: this performs a real WideCharToMultiByte(CP_UTF8) conversion; it must
+// NOT truncate each wchar_t to a byte, which would corrupt any non-ASCII text
+// (e.g. Cyrillic/CJK paths and messages) and break string comparisons.
 inline std::string WideToUTF8(const wchar_t* wide) {
     if (!wide) return "(null)";
-    std::string result;
-    while (*wide) {
-        result += (char)*wide++;
-    }
+    if (*wide == L'\0') return std::string();
+
+    const int sizeNeeded = WideCharToMultiByte(
+        CP_UTF8, 0, wide, -1, nullptr, 0, nullptr, nullptr);
+    if (sizeNeeded <= 0) return std::string();
+
+    // sizeNeeded includes the terminating null; allocate without it.
+    std::string result(static_cast<size_t>(sizeNeeded - 1), '\0');
+    WideCharToMultiByte(
+        CP_UTF8, 0, wide, -1, result.data(), sizeNeeded, nullptr, nullptr);
     return result;
 }
 
