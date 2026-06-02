@@ -4,6 +4,19 @@ project(PythonFar)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Prefer a self-contained Python SDK downloaded by setup_python.ps1.
+# This guarantees the adapter, test exe, and python_runtime all use the EXACT
+# same Python build (DLL + stdlib), independent of any system Python.
+if(NOT DEFINED PYTHONFAR_PYTHON_SDK)
+    set(PYTHONFAR_PYTHON_SDK "${CMAKE_SOURCE_DIR}/build/python_sdk")
+endif()
+if(EXISTS "${PYTHONFAR_PYTHON_SDK}/include/Python.h")
+    message(STATUS "Using self-contained Python SDK: ${PYTHONFAR_PYTHON_SDK}")
+    set(Python3_ROOT_DIR "${PYTHONFAR_PYTHON_SDK}")
+    set(Python3_FIND_STRATEGY LOCATION)
+    set(Python3_FIND_REGISTRY NEVER)
+endif()
+
 # Find Python
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 
