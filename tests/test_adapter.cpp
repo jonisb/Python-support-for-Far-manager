@@ -24,6 +24,16 @@ static std::wstring GetExeDir() {
     return (slash != std::wstring::npos) ? path.substr(0, slash) : L".";
 }
 
+static std::wstring GetProcessPathEnv() {
+    DWORD needed = GetEnvironmentVariableW(L"PATH", nullptr, 0);
+    if (needed == 0) return std::wstring();
+    std::wstring value(static_cast<size_t>(needed), L'\0');
+    DWORD written = GetEnvironmentVariableW(L"PATH", &value[0], needed);
+    if (written == 0) return std::wstring();
+    value.resize(static_cast<size_t>(written));
+    return value;
+}
+
 class AdapterTestFixture : public ::testing::Test {
 protected:
     HMODULE hAdapter = nullptr;
@@ -33,9 +43,33 @@ protected:
     GetFunctionAddressFunc getFunctionAddressFunc = nullptr;
     DestroyInstanceFunc destroyInstanceFunc = nullptr;
     FreeFunc freeFunc = nullptr;
+    std::wstring pathBeforeInit;
+    std::wstring pathAfterInit;
+    std::vector<DLL_DIRECTORY_COOKIE> dllDirCookies;
 
     void SetUp() override {
-        hAdapter = LoadLibraryW(L"PythonFar.adapter.dll");
+        // Mirror production loader behavior: do not rely on process PATH to
+        // resolve python311.dll / .pyd dependencies. Register the local runtime
+        // directories and load the adapter with explicit search flags.
+        std::wstring exeDir = GetExeDir();
+        for (const auto& dir : {
+            exeDir,
+            exeDir + L"\\python_runtime",
+            exeDir + L"\\python_runtime\\DLLs"
+        }) {
+            DWORD attrs = GetFileAttributesW(dir.c_str());
+            if (attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY)) {
+                DLL_DIRECTORY_COOKIE cookie = AddDllDirectory(dir.c_str());
+                if (cookie) dllDirCookies.push_back(cookie);
+            }
+        }
+
+        std::wstring adapterPath = exeDir + L"\\PythonFar.adapter.dll";
+        hAdapter = LoadLibraryExW(
+            adapterPath.c_str(), nullptr,
+            LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
+            LOAD_LIBRARY_SEARCH_DEFAULT_DIRS |
+            LOAD_LIBRARY_SEARCH_USER_DIRS);
         ASSERT_NE(hAdapter, nullptr) << "Failed to load PythonFar.adapter.dll";
 
         initFunc = reinterpret_cast<InitializeFunc>(GetProcAddress(hAdapter, "adapter_Initialize"));
@@ -52,8 +86,10 @@ protected:
         ASSERT_NE(destroyInstanceFunc, nullptr);
         ASSERT_NE(freeFunc, nullptr);
 
+        pathBeforeInit = GetProcessPathEnv();
         GlobalInfo gi = { sizeof(GlobalInfo) };
         ASSERT_TRUE(initFunc(&gi)) << "Adapter failed to initialize";
+        pathAfterInit = GetProcessPathEnv();
     }
 
     void TearDown() override {
@@ -67,6 +103,10 @@ protected:
         if (hAdapter) {
             FreeLibrary(hAdapter);
         }
+        for (DLL_DIRECTORY_COOKIE cookie : dllDirCookies) {
+            RemoveDllDirectory(cookie);
+        }
+        dllDirCookies.clear();
     }
 
     // Write a UTF-8 plugin source to a file next to the test exe. Returns the
@@ -90,6 +130,14 @@ protected:
 TEST_F(AdapterTestFixture, IsPlugin_InvalidFile) {
     BOOL isPlugin = isPluginFunc(L"nonexistent_plugin.py");
     EXPECT_FALSE(isPlugin) << "IsPlugin should return false for nonexistent file";
+}
+
+// Regression: adapter initialization must not permanently mutate process PATH.
+// PATH is shared by the entire Far process and all plugins; runtime DLL search
+// should use scoped AddDllDirectory/LoadLibraryEx flags instead.
+TEST_F(AdapterTestFixture, InitializeDoesNotModifyProcessPath) {
+    EXPECT_EQ(pathAfterInit, pathBeforeInit)
+        << "Adapter initialization must not prepend runtime dirs to process PATH";
 }
 
 TEST_F(AdapterTestFixture, CreateAndDestroyInstance) {

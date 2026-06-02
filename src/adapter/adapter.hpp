@@ -104,6 +104,7 @@ private:
     std::wstring m_ErrorDescription;
     std::wstring m_LastErrorSummary;
     std::wstring m_LastErrorDescription;
+    std::vector<DLL_DIRECTORY_COOKIE> m_DllDirectoryCookies;
 };
 
 // Plugin module instance - represents a loaded .py plugin

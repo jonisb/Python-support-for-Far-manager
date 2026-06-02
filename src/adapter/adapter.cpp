@@ -70,24 +70,6 @@ void PythonFarAdapter::InitializePython() {
     }
     std::wstring dllsDir = pythonHome.empty() ? pluginDir : (pythonHome + L"\\" + PythonFar::PYTHON_DLLS_SUBDIR);
 
-    wchar_t oldPath[32767];
-    DWORD oldPathLen = GetEnvironmentVariableW(L"PATH", oldPath, 32767);
-    std::wstring newPath;
-    if (!dllsDir.empty()) {
-        newPath += dllsDir + L";";
-    }
-    if (!pythonHome.empty()) {
-        newPath += pythonHome + L";";
-    }
-    if (!pluginDir.empty()) {
-        newPath += pluginDir + L";";
-    }
-    if (oldPathLen > 0) {
-        newPath.append(oldPath);
-    }
-    SetEnvironmentVariableW(L"PATH", newPath.c_str());
-    LOG_TRACE("Updated PATH with runtime directories");
-
     if (pythonHome.empty()) {
         LOG_TRACE(WideToUTF8(PythonFar::PYTHON_RUNTIME_DIR) << " directory not found; aborting initialization");
         m_ErrorSummary = L"Python Runtime Missing";
@@ -95,22 +77,39 @@ void PythonFarAdapter::InitializePython() {
         return;
     }
 
+    // Register runtime DLL directories without mutating process PATH or the
+    // process-wide SetDllDirectory setting. AddDllDirectory cookies are removed
+    // during FinalizePython(). Keep them active while Python may import .pyd
+    // extension modules that have side-by-side dependencies.
+    for (const auto& dir : { pluginDir, pythonHome, dllsDir }) {
+        if (dir.empty()) continue;
+        DWORD attrs = GetFileAttributesW(dir.c_str());
+        if (attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY)) {
+            DLL_DIRECTORY_COOKIE cookie = AddDllDirectory(dir.c_str());
+            if (cookie) {
+                m_DllDirectoryCookies.push_back(cookie);
+                LOG_TRACE("Added Python runtime DLL directory: " + ToUtf8(dir));
+            } else {
+                LOG_TRACE("AddDllDirectory failed for " + ToUtf8(dir) + ": " + std::to_string(GetLastError()));
+            }
+        }
+    }
+
     if (!pythonHome.empty()) {
         // Use PyConfig instead of deprecated Py_SetPythonHome (deprecated in 3.11)
         // Note: PyConfig is used via Py_InitializeFromConfig for more control,
-        // but we use the simple approach here since our paths are already set via environment
-        // and SetDllDirectoryW. The pythonHome path is prepared but Py_Initialize() will 
-        // find Python through the already-loaded python311.dll and PATH we modified above.
+        // but we use the simple approach here since the Python DLL is explicitly
+        // pinned below and runtime DLL directories are registered via
+        // AddDllDirectory (not process PATH / SetDllDirectoryW).
         LOG_TRACE("Python home prepared (using modern initialization approach)");
     }
 
-    if (!dllsDir.empty()) {
-        SetDllDirectoryW(dllsDir.c_str());
-        LOG_TRACE("Called SetDllDirectoryW with DLLs dir");
-    }
-
     std::wstring pythonDllPath = dllsDir.empty() ? (pythonHome + L"\\" + PythonFar::PYTHON_DLL) : (dllsDir + L"\\" + PythonFar::PYTHON_DLL);
-    HMODULE hPinnedPython = LoadLibraryExW(pythonDllPath.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+    HMODULE hPinnedPython = LoadLibraryExW(
+        pythonDllPath.c_str(), nullptr,
+        LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
+        LOAD_LIBRARY_SEARCH_DEFAULT_DIRS |
+        LOAD_LIBRARY_SEARCH_USER_DIRS);
     if (!hPinnedPython) {
         DWORD err = GetLastError();
         LOG_TRACE("Failed to load " << WideToUTF8(PythonFar::PYTHON_DLL) << " from runtime: " + std::to_string(err) + " path: " + ToUtf8(pythonDllPath));
@@ -151,7 +150,11 @@ void PythonFarAdapter::InitializePython() {
     }
 
     std::wstring ctypesPath = dllsDir + L"\\" + PythonFar::CTYPES_MODULE;
-    HMODULE hCtypes = LoadLibraryW(ctypesPath.c_str());
+    HMODULE hCtypes = LoadLibraryExW(
+        ctypesPath.c_str(), nullptr,
+        LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
+        LOAD_LIBRARY_SEARCH_DEFAULT_DIRS |
+        LOAD_LIBRARY_SEARCH_USER_DIRS);
     if (hCtypes) {
         LOG_TRACE("Successfully loaded " << WideToUTF8(PythonFar::CTYPES_MODULE) << " via LoadLibraryW (keeping it loaded)");
     } else {
@@ -159,12 +162,20 @@ void PythonFarAdapter::InitializePython() {
     }
 
     std::wstring libffiRootPath = pythonHome + L"\\" + PythonFar::LIBFFI_DLL;
-    HMODULE hLibFFI = LoadLibraryExW(libffiRootPath.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+    HMODULE hLibFFI = LoadLibraryExW(
+        libffiRootPath.c_str(), nullptr,
+        LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
+        LOAD_LIBRARY_SEARCH_DEFAULT_DIRS |
+        LOAD_LIBRARY_SEARCH_USER_DIRS);
     if (hLibFFI) {
          LOG_TRACE("Successfully pre-loaded " << WideToUTF8(PythonFar::LIBFFI_DLL) << " (root)");
     } else {
          std::wstring libffiDllsPath = dllsDir + L"\\" + PythonFar::LIBFFI_DLL;
-         hLibFFI = LoadLibraryExW(libffiDllsPath.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+         hLibFFI = LoadLibraryExW(
+             libffiDllsPath.c_str(), nullptr,
+             LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
+             LOAD_LIBRARY_SEARCH_DEFAULT_DIRS |
+             LOAD_LIBRARY_SEARCH_USER_DIRS);
          if (hLibFFI) {
              LOG_TRACE("Successfully pre-loaded " << WideToUTF8(PythonFar::LIBFFI_DLL) << " (DLLs)");
          } else {
@@ -205,6 +216,16 @@ void PythonFarAdapter::FinalizePython() {
             }
             Py_Finalize();
             LOG_TRACE("Python finalized");
+        }
+    }
+
+    if (!Py_IsInitialized() || g_PythonRefCount == 0) {
+        for (DLL_DIRECTORY_COOKIE cookie : m_DllDirectoryCookies) {
+            RemoveDllDirectory(cookie);
+        }
+        if (!m_DllDirectoryCookies.empty()) {
+            LOG_TRACE("Removed Python runtime DLL directories");
+            m_DllDirectoryCookies.clear();
         }
     }
 }

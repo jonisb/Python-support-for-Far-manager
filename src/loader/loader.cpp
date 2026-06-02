@@ -2,6 +2,7 @@
 #include "../GlobalInfo.hpp"
 #include "loader.hpp"
 #include <sstream>
+#include <vector>
 
 extern "C" IMAGE_DOS_HEADER __ImageBase;
 
@@ -82,26 +83,35 @@ bool Adapter::ModuleInit() {
     LOG_TRACE("Adapter DLL file exists, attempting LoadLibraryExW with altered search path");
     OutputDebugStringW((L"PythonFar Loader: Adapter DLL found, attempting to load from: " + pathStr + L"\n").c_str());
 
+    std::vector<DLL_DIRECTORY_COOKIE> dllDirCookies;
     if (!adapterDir.empty()) {
-        SetDllDirectoryW(adapterDir.c_str());
         std::wstring pythonRuntime = adapterDir + L"\\" + PythonFar::PYTHON_RUNTIME_DIR;
         std::wstring pythonDLLs = pythonRuntime + L"\\" + PythonFar::PYTHON_DLLS_SUBDIR;
 
-        wchar_t oldPath[32767];
-        DWORD oldPathLen = GetEnvironmentVariableW(L"PATH", oldPath, 32767);
-        std::wstring newPath;
-        newPath.append(pythonDLLs).append(L";");
-        newPath.append(pythonRuntime).append(L";");
-        newPath.append(adapterDir).append(L";");
-        if (oldPathLen > 0) {
-            newPath.append(oldPath);
+        for (const auto& dir : { adapterDir, pythonRuntime, pythonDLLs }) {
+            DWORD attrs = GetFileAttributesW(dir.c_str());
+            if (attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY)) {
+                DLL_DIRECTORY_COOKIE cookie = AddDllDirectory(dir.c_str());
+                if (cookie) {
+                    dllDirCookies.push_back(cookie);
+                    LOG_TRACE("Added temporary DLL directory: " << WideToUTF8(dir.c_str()));
+                } else {
+                    LOG_TRACE("AddDllDirectory failed for " << WideToUTF8(dir.c_str()) << ": " << GetLastError());
+                }
+            }
         }
-        SetEnvironmentVariableW(L"PATH", newPath.c_str());
-        LOG_TRACE("Updated PATH for Python runtime and adapter dependencies");
     }
 
-    // Load the adapter DLL with altered search path so side-by-side deps resolve
-    m_Adapter.reset(LoadLibraryExW(pathStr.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH));
+    // Load the adapter with an explicit, scoped DLL search path. Do not mutate
+    // process-wide PATH or SetDllDirectoryW; those affect all Far plugins.
+    m_Adapter.reset(LoadLibraryExW(
+        pathStr.c_str(), nullptr,
+        LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
+        LOAD_LIBRARY_SEARCH_DEFAULT_DIRS |
+        LOAD_LIBRARY_SEARCH_USER_DIRS));
+    for (DLL_DIRECTORY_COOKIE cookie : dllDirCookies) {
+        RemoveDllDirectory(cookie);
+    }
     if (!m_Adapter) {
         DWORD error = GetLastError();
         LOG_ERROR("LoadLibraryExW failed with error: " << error << ", path: " << WideToUTF8(pathStr.c_str()));
