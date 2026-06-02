@@ -63,7 +63,7 @@ jobs:
     - name: Configure CMake
       run: |
         cd build
-        cmake .. -G "Visual Studio 17 2022" -A ${{ matrix.cmake_platform }} -DPYTHONFAR_RUNTIME_DLLS="%GITHUB_WORKSPACE%\build\Release\python_runtime\DLLs"
+        cmake .. -G "Visual Studio 17 2022" -A ${{ matrix.cmake_platform }}
       shell: cmd
     
     - name: Build Release
@@ -76,19 +76,13 @@ jobs:
       run: copy python\test_plugin.far.py build\Release\test_plugin.far.py
       shell: cmd
     
-    - name: Diagnose Python versions
+    - name: Copy runtime DLLs next to test exe
       run: |
-        Write-Host "=== _sre.MAGIC from the linked python (Python3_ROOT_DIR) ==="
-        & "$env:Python3_ROOT_DIR\python.exe" -c "import _sre, re._constants as c; print('dll _sre.MAGIC =', _sre.MAGIC); print('lib _constants.MAGIC =', c.MAGIC)"
-        
-        Write-Host "=== _constants.py copied into python_runtime ==="
-        Get-Content "build\Release\python_runtime\Lib\re\_constants.py" | Select-String "^MAGIC"
-        
-        Write-Host "=== compare _constants.py files ==="
-        $a = "$env:Python3_ROOT_DIR\Lib\re\_constants.py"
-        $b = "build\Release\python_runtime\Lib\re\_constants.py"
-        Write-Host "root: $((Get-FileHash $a).Hash)"
-        Write-Host "rt:   $((Get-FileHash $b).Hash)"
+        # Ensure the test exe loads the SAME python311.dll as python_runtime\Lib
+        # by placing the runtime DLLs in the exe directory (searched first).
+        Copy-Item "build\Release\python_runtime\DLLs\*.dll" "build\Release\" -Force
+        Copy-Item "build\Release\python_runtime\DLLs\*.pyd" "build\Release\" -Force -ErrorAction SilentlyContinue
+        Write-Host "Copied runtime DLLs next to test exe"
       shell: pwsh
     
     - name: Run tests
