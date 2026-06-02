@@ -720,15 +720,14 @@ HANDLE WINAPI OpenW(const OpenInfo* Info) {
             if (hModule) {
                 WCHAR dllPath[MAX_PATH];
                 GetModuleFileNameW(hModule, dllPath, MAX_PATH);
-                // Remove the DLL filename to get directory
+                // Remove the DLL filename to get directory (but do NOT change process CWD)
                 WCHAR* lastSlash = wcsrchr(dllPath, L'\\');
                 if (lastSlash) {
                     *lastSlash = L'\0';
-                    SetCurrentDirectoryW(dllPath);
                 }
-                
+
                 WIN32_FIND_DATAW findData;
-                std::wstring searchPattern = PythonFar::PYTHON_PLUGINS_DIR + std::wstring(L"\\") + PythonFar::PLUGIN_SEARCH_PATTERN;
+                std::wstring searchPattern = std::wstring(dllPath) + L"\\" + PythonFar::PYTHON_PLUGINS_DIR + L"\\" + PythonFar::PLUGIN_SEARCH_PATTERN;
                 HANDLE hFind = FindFirstFileW(searchPattern.c_str(), &findData);
                 if (hFind != INVALID_HANDLE_VALUE) {
                     do {
