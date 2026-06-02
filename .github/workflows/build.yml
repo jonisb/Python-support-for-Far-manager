@@ -72,10 +72,6 @@ jobs:
         cmake --build . --config Release
       shell: cmd
     
-    - name: Create python directory
-      run: mkdir build\Release\python
-      shell: cmd
-    
     - name: Copy test plugin
       run: copy python\test_plugin.far.py build\Release\test_plugin.far.py
       shell: cmd
