@@ -26,6 +26,16 @@ jobs:
     steps:
     - uses: actions/checkout@v6
     
+    - name: Set up Python 3.11 (${{ matrix.arch }})
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        architecture: ${{ matrix.python_arch }}
+    
+    - name: Verify Python architecture
+      run: python -c "import struct; arch='64' if struct.calcsize('P')==8 else '32'; print(f'Python {arch}-bit'); exit(0 if (arch=='64')==('${{ matrix.arch }}'=='x64') else 1)"
+      shell: cmd
+    
     - name: Set up Visual Studio
       uses: microsoft/setup-msbuild@v2
       with:
