@@ -177,7 +177,7 @@ FARPROC Adapter::GetFunctionAddress(HANDLE Instance, const wchar_t* FunctionName
 }
 
 BOOL Adapter::GetError(ErrorInfo* Info) const noexcept {
-    if (!m_Activated)
+    if (!m_Activated || !Info)
         return FALSE;
 
     if (m_GetError)
