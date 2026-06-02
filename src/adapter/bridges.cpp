@@ -2,6 +2,7 @@
 #include "adapter.hpp"
 #include <sstream>
 #include <string>
+#include <vector>
 #include <unordered_set>
 #include <thread>
 #include <chrono>
@@ -34,6 +35,48 @@ static std::unordered_set<HANDLE> g_PendingCloseDialogs;
 
 static void BridgeLog(const char* message) {
     LOG_TRACE(message);
+}
+
+// Show a simple informational/error message box through Far's Message API.
+// `title` is the first line; `body` may contain '\n' which splits into lines.
+// Returns true if the message was shown. Safe to call before the bridge is
+// initialized (returns false without doing anything).
+extern "C" __declspec(dllexport) BOOL WINAPI PythonFar_ShowMessage(
+    const GUID* PluginId, const wchar_t* title, const wchar_t* body) {
+    if (!g_BridgeValid || !g_BridgeStartupInfo.Message) {
+        BridgeLog("PythonFar_ShowMessage: bridge/Message unavailable");
+        return FALSE;
+    }
+
+    std::vector<std::wstring> lines;
+    lines.push_back(title ? std::wstring(title) : std::wstring(L"PythonFar"));
+
+    if (body) {
+        std::wstring text(body);
+        size_t start = 0;
+        while (start <= text.size()) {
+            size_t nl = text.find(L'\n', start);
+            std::wstring line = (nl == std::wstring::npos)
+                ? text.substr(start)
+                : text.substr(start, nl - start);
+            // Strip a trailing '\r' (CRLF input).
+            if (!line.empty() && line.back() == L'\r') line.pop_back();
+            lines.push_back(line);
+            if (nl == std::wstring::npos) break;
+            start = nl + 1;
+        }
+    }
+    // Final button line.
+    lines.push_back(L"OK");
+
+    std::vector<const wchar_t*> items;
+    items.reserve(lines.size());
+    for (const auto& l : lines) items.push_back(l.c_str());
+
+    g_BridgeStartupInfo.Message(
+        PluginId, PluginId, FMSG_WARNING | FMSG_LEFTALIGN,
+        nullptr, items.data(), items.size(), 1 /* one button: OK */);
+    return TRUE;
 }
 
 extern "C" __declspec(dllexport) intptr_t WINAPI PythonFar_AdvControl(

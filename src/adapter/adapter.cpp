@@ -7,6 +7,11 @@
 
 extern "C" IMAGE_DOS_HEADER __ImageBase;
 
+// Implemented in bridges.cpp (same DLL). Shows a Far message box; the body may
+// contain '\n'-separated lines. Returns FALSE if the Far bridge is unavailable.
+extern "C" __declspec(dllexport) BOOL WINAPI PythonFar_ShowMessage(
+    const GUID* PluginId, const wchar_t* title, const wchar_t* body);
+
 // Global Python initialization reference counter
 // Python can only be initialized once per process, so we use a reference counter
 // to ensure Py_Finalize() is not called more than once
@@ -554,7 +559,75 @@ bool PythonFarAdapter::GetError(ErrorInfo* info) {
     return true;
 }
 
+void PythonFarAdapter::SetError(const std::wstring& summary, const std::wstring& description) {
+    m_ErrorSummary = summary;
+    m_ErrorDescription = description;
+}
+
 // ===== PluginModule Implementation =====
+
+// Convert a UTF-8 C string to std::wstring (empty on null/failure).
+static std::wstring Utf8ToWideStr(const char* utf8) {
+    if (!utf8) return std::wstring();
+    int len = MultiByteToWideChar(CP_UTF8, 0, utf8, -1, nullptr, 0);
+    if (len <= 0) return std::wstring();
+    std::wstring ws(static_cast<size_t>(len - 1), L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, utf8, -1, &ws[0], len);
+    return ws;
+}
+
+// Capture the currently-set Python exception (and its traceback) as a wide
+// string, then clear the error indicator. Must be called with the GIL held.
+// Returns an empty string if no error is set. The error is consumed (cleared).
+static std::wstring CapturePythonTraceback() {
+    if (!PyErr_Occurred()) return std::wstring();
+
+    PyObject *ptype = nullptr, *pvalue = nullptr, *ptraceback = nullptr;
+    PyErr_Fetch(&ptype, &pvalue, &ptraceback);
+    PyErr_NormalizeException(&ptype, &pvalue, &ptraceback);
+    if (ptraceback) {
+        PyException_SetTraceback(pvalue, ptraceback);
+    }
+
+    std::wstring result;
+
+    // Try traceback.format_exception() for a full, Python-style traceback.
+    PyObj tbModule(PyImport_ImportModule("traceback"));
+    if (tbModule) {
+        PyObj formatted(PyObject_CallMethod(
+            tbModule, "format_exception", "OOO",
+            ptype ? ptype : Py_None,
+            pvalue ? pvalue : Py_None,
+            ptraceback ? ptraceback : Py_None));
+        if (formatted && PyList_Check(formatted)) {
+            Py_ssize_t n = PyList_Size(formatted);
+            std::string utf8;
+            for (Py_ssize_t i = 0; i < n; ++i) {
+                PyObject* line = PyList_GetItem(formatted, i);  // borrowed
+                if (line && PyUnicode_Check(line)) {
+                    const char* s = PyUnicode_AsUTF8(line);
+                    if (s) utf8 += s;
+                }
+            }
+            result = Utf8ToWideStr(utf8.c_str());
+        }
+    }
+
+    // Fallback: just stringify the exception value.
+    if (result.empty() && pvalue) {
+        PyObj str(PyObject_Str(pvalue));
+        if (str) {
+            const char* s = PyUnicode_AsUTF8(str);
+            if (s) result = Utf8ToWideStr(s);
+        }
+    }
+
+    Py_XDECREF(ptype);
+    Py_XDECREF(pvalue);
+    Py_XDECREF(ptraceback);
+    PyErr_Clear();
+    return result;
+}
 
 static bool ReadUnsignedAttr(PyObject* obj, const char* name, unsigned long* value) {
     PyObj attr = PyObject_GetAttrString(obj, name);
@@ -858,6 +931,25 @@ void PluginModule::GetGlobalInfoW(GlobalInfo* Info) {
     Info->Author       = m_Author.c_str();
 }
 
+void PluginModule::ReportPluginInfoFailure(const std::wstring& summary, const std::wstring& detail) {
+    LOG_ERROR("PluginModule::GetPluginInfoW failure: " + WideToUTF8(summary.c_str())
+              + " | " + WideToUTF8(detail.c_str()));
+
+    // Build a user-facing description: which plugin, what went wrong, traceback.
+    std::wstring description = L"Plugin: " + m_Filename + L"\n" + summary;
+    if (!detail.empty()) {
+        description += L"\n\n" + detail;
+    }
+
+    // 1) Record for Far's GetError export so the host can surface it.
+    if (g_Adapter) {
+        g_Adapter->SetError(summary, description);
+    }
+
+    // 2) Show a message box to the user immediately.
+    PythonFar_ShowMessage(&m_Guid, L"PythonFar: Plugin Error", description.c_str());
+}
+
 void PluginModule::GetPluginInfoW(PluginInfo* Info) {
     LOG_TRACE("PluginModule::GetPluginInfoW");
     
@@ -882,11 +974,63 @@ void PluginModule::GetPluginInfoW(PluginInfo* Info) {
 
     ScopedGIL gil;
 
-    // Call the Python plugin's get_plugin_info method
-    PyObj result = CallMethod("get_plugin_info");
-    if (!result || !PyDict_Check(result)) {
-        LOG_ERROR("PluginModule::GetPluginInfoW: get_plugin_info() failed or returned invalid data");
-        throw std::runtime_error("Plugin get_plugin_info() failed");
+    // Every plugin MUST provide get_plugin_info() (directly or via the base
+    // class) returning a dict with at least a "title". If the method is
+    // missing, raises, or returns invalid data we fail loudly: record the
+    // error for Far's GetError export AND show the user a message box with the
+    // Python traceback, then leave a safe default PluginInfo so Far does not
+    // read partially-initialized memory.
+    //
+    // We invoke the method directly (not through CallMethod) so we can capture
+    // the Python traceback on failure instead of having it silently cleared.
+    if (!m_PluginInstance) {
+        ReportPluginInfoFailure(
+            L"Plugin instance is not available.",
+            L"The plugin failed to construct; cannot query get_plugin_info().");
+        return;
+    }
+
+    PyObj method(PyObject_GetAttrString(m_PluginInstance, "get_plugin_info"));
+    if (!method || !PyCallable_Check(method)) {
+        if (PyErr_Occurred()) PyErr_Clear();
+        ReportPluginInfoFailure(
+            L"Plugin does not implement get_plugin_info().",
+            L"Define get_plugin_info() returning a dict with at least a 'title', "
+            L"or inherit from the far.Plugin base class which provides it.");
+        return;
+    }
+
+    PyObj result(PyObject_CallObject(method, nullptr));
+    if (!result) {
+        // The method raised: capture the full traceback for the user.
+        std::wstring tb = CapturePythonTraceback();
+        ReportPluginInfoFailure(
+            L"get_plugin_info() raised an exception.",
+            tb.empty()
+                ? L"See %TEMP%\\pythonfar_adapter.log for details."
+                : tb);
+        return;
+    }
+
+    if (!PyDict_Check(result)) {
+        if (PyErr_Occurred()) PyErr_Clear();
+        ReportPluginInfoFailure(
+            L"get_plugin_info() did not return a dict.",
+            L"It must return a dict with at least a 'title' key.");
+        return;
+    }
+
+    // A plugin must provide at least a non-empty title (its name).
+    {
+        PyObject* titleCheck = PyDict_GetItemString(result, "title");  // borrowed
+        bool hasTitle = titleCheck && PyUnicode_Check(titleCheck)
+                        && PyUnicode_GetLength(titleCheck) > 0;
+        if (!hasTitle) {
+            ReportPluginInfoFailure(
+                L"get_plugin_info() did not provide a plugin name.",
+                L"The returned dict must contain a non-empty 'title'.");
+            return;
+        }
     }
     
     // Parse the dictionary result

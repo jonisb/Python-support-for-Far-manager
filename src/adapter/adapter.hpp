@@ -89,6 +89,10 @@ public:
     // Get error information
     bool GetError(ErrorInfo* info);
 
+    // Set the pending error that Far will retrieve via GetError(). Used by
+    // plugin instances (e.g. PluginModule) to report failures back to the host.
+    void SetError(const std::wstring& summary, const std::wstring& description);
+
 private:
     void InitializePython();
     void FinalizePython();
@@ -146,6 +150,11 @@ public:
     PyObject* CallMethod(const char* methodName, const char* format = nullptr, ...);
 
 private:
+    // Report a fatal PluginInfo failure: log it, record it for Far's GetError,
+    // and show a message box to the user. `detail` may contain a Python
+    // traceback (multi-line).
+    void ReportPluginInfoFailure(const std::wstring& summary, const std::wstring& detail);
+
     std::wstring m_Filename;
     PyObj m_Module;
     PyObj m_PluginClass;

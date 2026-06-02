@@ -28,6 +28,15 @@ class Plugin:
         self.psi_ptr = psi_ptr
         log.info("Simple test plugin initialized")
 
+    def get_plugin_info(self):
+        """Return plugin metadata dict (required by the adapter)."""
+        return {
+            "title": self.title,
+            "description": self.description,
+            "author": self.author,
+            "version": ".".join(str(v) for v in self.version),
+        }
+
     def GetPluginInfoW(self, info_ptr):
         """Provide plugin information to Far Manager"""
         log.debug("Simple plugin GetPluginInfoW called")
