@@ -26,23 +26,6 @@ jobs:
     steps:
     - uses: actions/checkout@v6
     
-    - name: Set up Python 3.11 (${{ matrix.arch }})
-      if: matrix.arch == 'x64'
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-        architecture: x64
-
-    - name: Set up Python 3.11 (x86 manual install)
-      if: matrix.arch == 'x86'
-      run: |
-        curl -L -o python-3.11.9-x86.exe https://www.python.org/ftp/python/3.11.9/python-3.11.9.exe
-        Start-Process -Wait -FilePath "python-3.11.9-x86.exe" -ArgumentList "/quiet InstallAllUsers=0 TargetDir=C:\Python311-x86 Include_test=0"
-        echo "C:\Python311-x86" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-        echo "Python3_ROOT_DIR=C:\Python311-x86" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-        Write-Host "Python installed: $(Test-Path 'C:\Python311-x86\python311.dll')"
-      shell: pwsh
-    
     - name: Set up Visual Studio
       uses: microsoft/setup-msbuild@v2
       with:
@@ -54,10 +37,8 @@ jobs:
         if not exist logs mkdir logs
       shell: cmd
     
-    - name: Setup python_runtime
-      run: |
-        $env:PYTHON_HOME = $env:Python3_ROOT_DIR
-        .\setup_runtime.ps1 -BuildDir "build\Release" -UseFallback
+    - name: Download self-contained Python (${{ matrix.arch }})
+      run: .\setup_python.ps1 -Arch ${{ matrix.arch }}
       shell: pwsh
     
     - name: Configure CMake
@@ -78,11 +59,10 @@ jobs:
     
     - name: Copy runtime DLLs next to test exe
       run: |
-        # Ensure the test exe loads the SAME python311.dll as python_runtime\Lib
-        # by placing the runtime DLLs in the exe directory (searched first).
+        # Place runtime DLLs next to the test exe so it loads the SAME
+        # python311.dll that matches python_runtime\Lib (no system Python).
         Copy-Item "build\Release\python_runtime\DLLs\*.dll" "build\Release\" -Force
         Copy-Item "build\Release\python_runtime\DLLs\*.pyd" "build\Release\" -Force -ErrorAction SilentlyContinue
-        Write-Host "Copied runtime DLLs next to test exe"
       shell: pwsh
     
     - name: Run tests
@@ -91,19 +71,10 @@ jobs:
         ctest --output-on-failure -C Release
       shell: cmd
     
-    - name: Find log files
-      if: always()
-      run: |
-        echo "TEMP=%TEMP%"
-        dir "%TEMP%\pythonfar_*.log" 2>nul || echo "No logs found in TEMP"
-        dir "%USERPROFILE%\AppData\Local\Temp\pythonfar_*.log" 2>nul || echo "No logs found in AppData"
-      shell: cmd
-    
     - name: Copy logs to workspace
       if: always()
       run: |
         copy "%TEMP%\pythonfar_*.log" logs\ 2>nul
-        copy "%USERPROFILE%\AppData\Local\Temp\pythonfar_*.log" logs\ 2>nul
         dir logs\
       shell: cmd
     
