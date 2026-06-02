@@ -4,6 +4,14 @@ project(PythonFar)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# If python_runtime\DLLs exists next to the build output, prefer it so the
+# adapter DLL, test exe, and runtime all use the exact same Python build.
+set(PYTHON_RUNTIME_DLLS "${CMAKE_SOURCE_DIR}/build/Release/python_runtime/DLLs")
+if(EXISTS "${PYTHON_RUNTIME_DLLS}/python311.dll")
+    message(STATUS "Using Python from python_runtime: ${PYTHON_RUNTIME_DLLS}")
+    set(Python3_ROOT_DIR "${PYTHON_RUNTIME_DLLS}")
+endif()
+
 # Find Python
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 
@@ -68,6 +76,7 @@ target_link_libraries(pythonfar_tests
 add_test(NAME PythonFarTests 
          COMMAND pythonfar_tests
          WORKING_DIRECTORY "$<TARGET_FILE_DIR:pythonfar_tests>")
+
 # ===== Install =====
 install(TARGETS PythonFar PythonFar.adapter
     RUNTIME DESTINATION .
