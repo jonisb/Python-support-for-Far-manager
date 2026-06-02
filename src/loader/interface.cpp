@@ -775,8 +775,17 @@ HANDLE WINAPI OpenW(const OpenInfo* Info) {
         else if (command.substr(0, 5) == "load ") {
             LOG_TRACE("OpenW: Handling load command");
             std::string pluginName = command.substr(5);
-             LOG_TRACE("OpenW: Loading plugin: " << pluginName);
-            
+            LOG_TRACE("OpenW: Loading plugin: " << pluginName);
+
+            // Only allow bare plugin names (no paths) to avoid directory traversal.
+            if (pluginName.empty() ||
+                pluginName.find("..") != std::string::npos ||
+                pluginName.find_first_of("\\/:") != std::string::npos) {
+                if (showUI) {
+                    ShowMessage("Invalid plugin name. Use a bare name without path separators.", "PythonFar Error", MB_OK | MB_ICONERROR);
+                }
+                return nullptr;
+            }
             // Check if adapter is initialized
             if (!g_Adapter.IsInitialized()) {
                 LOG_TRACE("OpenW: Adapter not initialized, trying to initialize...");
