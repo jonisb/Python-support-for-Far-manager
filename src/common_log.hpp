@@ -119,10 +119,11 @@ inline std::string WideToUTF8(const wchar_t* wide) {
         CP_UTF8, 0, wide, -1, nullptr, 0, nullptr, nullptr);
     if (sizeNeeded <= 0) return std::string();
 
-    // sizeNeeded includes the terminating null; allocate without it.
-    std::string result(static_cast<size_t>(sizeNeeded - 1), '\0');
+    // sizeNeeded includes the terminating null; allocate with it, then trim it.
+    std::string result(static_cast<size_t>(sizeNeeded), '\0');
     WideCharToMultiByte(
         CP_UTF8, 0, wide, -1, result.data(), sizeNeeded, nullptr, nullptr);
+    if (!result.empty()) result.pop_back();
     return result;
 }
 
