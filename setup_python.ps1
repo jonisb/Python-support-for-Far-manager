@@ -10,8 +10,9 @@
 # the downloaded package, so the result is identical on any machine.
 #
 # Usage:
-#   .\setup_python.ps1 -Arch x64 -Dest "build\python_sdk"
-#   .\setup_python.ps1 -Arch x86 -Dest "build\python_sdk"
+#   .\setup_python.ps1 -Arch x64   -Dest "build\python_sdk"
+#   .\setup_python.ps1 -Arch x86   -Dest "build\python_sdk"
+#   .\setup_python.ps1 -Arch arm64 -Dest "build\python_sdk"
 #
 # Outputs (under $Dest):
 #   tools\          - python.exe, python311.dll, DLLs, Lib (the NuGet "tools" dir)
@@ -23,7 +24,8 @@
 # ============================================================================
 
 param(
-    [string]$Arch = "x64",                 # x64 or x86
+    [ValidateSet("x64", "x86", "arm64")]
+    [string]$Arch = "x64",                 # x64, x86, or arm64
     [string]$Dest = "build\python_sdk",
     [string]$RuntimeDest = "",             # defaults to build\Release\python_runtime
     [string]$PythonVersion = "3.11.9"
@@ -31,9 +33,20 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# NuGet package id differs by architecture.
-$pkgId = if ($Arch -eq "x86") { "pythonx86" } else { "python" }
-$nupkgUrl = "https://www.nuget.org/api/v2/package/$pkgId/$PythonVersion"
+# NuGet package id differs by architecture:
+#   x64   -> python
+#   x86   -> pythonx86
+#   arm64 -> pythonarm64
+$pkgId = switch ($Arch) {
+    "x86"   { "pythonx86" }
+    "arm64" { "pythonarm64" }
+    default { "python" }
+}
+# Use the v3 flat-container endpoint: it serves every package id (including
+# pythonarm64, which the legacy v2 /api/v2/package endpoint does not expose).
+$pkgIdLower = $pkgId.ToLowerInvariant()
+$verLower = $PythonVersion.ToLowerInvariant()
+$nupkgUrl = "https://api.nuget.org/v3-flatcontainer/$pkgIdLower/$verLower/$pkgIdLower.$verLower.nupkg"
 
 if ([string]::IsNullOrEmpty($RuntimeDest)) {
     $RuntimeDest = "build\Release\python_runtime"
