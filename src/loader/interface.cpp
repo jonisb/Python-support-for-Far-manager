@@ -74,8 +74,10 @@ static bool LoadPlugin(const std::string& pluginName) {
         }
     }
     
-    // Construct full absolute path to plugin file
-    std::wstring widePluginName(pluginName.begin(), pluginName.end());
+    // Construct full absolute path to plugin file.
+    // pluginName is UTF-8 (produced via WideCharToMultiByte(CP_UTF8,...)); decode
+    // it properly so non-ASCII plugin names/paths are not corrupted.
+    std::wstring widePluginName = PythonFar::UTF8ToWide(pluginName);
     std::wstring widePluginPath = basePath + PythonFar::PYTHON_PLUGINS_DIR + L"\\" + widePluginName;
     if (widePluginPath.find(PythonFar::PLUGIN_EXTENSION) == std::wstring::npos) {
         widePluginPath += PythonFar::PLUGIN_EXTENSION;
@@ -474,7 +476,8 @@ void WINAPI GetPluginInfoW(PluginInfo* Info) {
     
     // Add loaded plugins to menu
     for (const auto& pair : g_LoadedPlugins) {
-        std::wstring pluginName(pair.first.begin(), pair.first.end());
+        // pair.first is a UTF-8 plugin name; decode properly for the menu.
+        std::wstring pluginName = PythonFar::UTF8ToWide(pair.first);
         g_MenuStrings.push_back(L"[Py] " + pluginName);
         // Generate a GUID for this plugin (simple hash-based)
         GUID pluginGuid = PythonFar::LOADER_GUID;
@@ -779,8 +782,11 @@ HANDLE WINAPI OpenW(const OpenInfo* Info) {
                 }
             }
             
-            // Construct full absolute path to plugin file
-            std::wstring widePluginName(pluginName.begin(), pluginName.end());
+            // Construct full absolute path to plugin file.
+            // pluginName is UTF-8 (decoded from the command line via
+            // WideCharToMultiByte(CP_UTF8,...)); decode it properly so non-ASCII
+            // plugin names/paths are not corrupted.
+            std::wstring widePluginName = PythonFar::UTF8ToWide(pluginName);
             std::wstring widePluginPath = basePath + PythonFar::PYTHON_PLUGINS_DIR + L"\\" + widePluginName;
             if (widePluginPath.find(PythonFar::PLUGIN_EXTENSION) == std::wstring::npos) {
                 widePluginPath += PythonFar::PLUGIN_EXTENSION;

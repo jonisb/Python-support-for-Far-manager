@@ -318,7 +318,7 @@ std::unique_ptr<PluginModule> PythonFarAdapter::CreatePluginModule(const wchar_t
             if (!f.good()) {
                 LOG_TRACE("File does not exist: " + filenameNarrow);
                 m_ErrorSummary = L"Load Error";
-                std::wstring wideFilename(filenameNarrow.begin(), filenameNarrow.end());
+                std::wstring wideFilename = PythonFar::UTF8ToWide(filenameNarrow);
                 m_ErrorDescription = L"File not found: " + wideFilename;
                 
                 return nullptr;
@@ -351,7 +351,7 @@ std::unique_ptr<PluginModule> PythonFarAdapter::CreatePluginModule(const wchar_t
             LOG_TRACE("Failed to create spec from file location");
             PyErr_Print();
             m_ErrorSummary = L"Import Error";
-            std::wstring wideModuleName(moduleNameStr.begin(), moduleNameStr.end());
+            std::wstring wideModuleName = PythonFar::UTF8ToWide(moduleNameStr);
             m_ErrorDescription = L"Failed to create module spec for: " + wideModuleName;
             
             return nullptr;
@@ -419,7 +419,7 @@ std::unique_ptr<PluginModule> PythonFarAdapter::CreatePluginModule(const wchar_t
         if (!pPluginClass) {
             LOG_TRACE("Module has no Plugin class");
             m_ErrorSummary = L"Plugin Error";
-            std::wstring wideModuleName(moduleNameStr.begin(), moduleNameStr.end());
+            std::wstring wideModuleName = PythonFar::UTF8ToWide(moduleNameStr);
             m_ErrorDescription = L"Module does not have a Plugin class: " + wideModuleName;
             
             return nullptr;
@@ -932,7 +932,8 @@ void PluginModule::GetGlobalInfoW(GlobalInfo* Info) {
 }
 
 void PluginModule::ReportPluginInfoFailure(const std::wstring& summary, const std::wstring& detail) {
-    LOG_ERROR("PluginModule::GetPluginInfoW failure: " + WideToUTF8(summary.c_str())
+    LOG_ERROR("PluginModule::GetPluginInfoW failure in plugin '" + WideToUTF8(m_Filename.c_str())
+              + "': " + WideToUTF8(summary.c_str())
               + " | " + WideToUTF8(detail.c_str()));
 
     // Build a user-facing description: which plugin, what went wrong, traceback.

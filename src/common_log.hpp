@@ -126,6 +126,25 @@ inline std::string WideToUTF8(const wchar_t* wide) {
     return result;
 }
 
+// Convert a UTF-8 byte string to a UTF-16 wide string.
+// NOTE: this performs a real MultiByteToWideChar(CP_UTF8) conversion; it must
+// NOT widen each byte to a wchar_t, which would corrupt any non-ASCII text
+// (e.g. Cyrillic/CJK plugin names and paths) and can break plugin loading on
+// localized systems.
+inline std::wstring UTF8ToWide(const std::string& utf8) {
+    if (utf8.empty()) return std::wstring();
+
+    const int sizeNeeded = MultiByteToWideChar(
+        CP_UTF8, 0, utf8.data(), static_cast<int>(utf8.size()), nullptr, 0);
+    if (sizeNeeded <= 0) return std::wstring();
+
+    std::wstring result(static_cast<size_t>(sizeNeeded), L'\0');
+    MultiByteToWideChar(
+        CP_UTF8, 0, utf8.data(), static_cast<int>(utf8.size()),
+        result.data(), sizeNeeded);
+    return result;
+}
+
 } // namespace PythonFar
 
 // Keep WideToUTF8 available unqualified for existing call sites
