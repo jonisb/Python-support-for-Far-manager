@@ -133,8 +133,11 @@ add_custom_command(TARGET pythonfar_tests POST_BUILD
 add_executable(struct_dumper tools/struct_dumper.cpp)
 if(NOT PYTHONFAR_CROSS_BUILD)
     add_custom_command(TARGET struct_dumper POST_BUILD
-        COMMAND struct_dumper "$<TARGET_FILE_DIR:PythonFar>/far_struct_offsets.json"
+        COMMAND $<TARGET_FILE:struct_dumper> "$<TARGET_FILE_DIR:PythonFar>/far_struct_offsets.json"
         COMMAND ${CMAKE_COMMAND} -E copy
+        "$<TARGET_FILE_DIR:PythonFar>/far_struct_offsets.json"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/far_struct_offsets.json"
+    )
         "$<TARGET_FILE_DIR:PythonFar>/far_struct_offsets.json"
         "${CMAKE_CURRENT_SOURCE_DIR}/python/far_struct_offsets.json"
     )
