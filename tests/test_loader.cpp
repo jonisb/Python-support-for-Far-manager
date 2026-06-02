@@ -283,8 +283,22 @@ protected:
             GetProcAddress(hLoader, "OpenW"));
         setHook = reinterpret_cast<ShowMessageBoxFn (WINAPI*)(ShowMessageBoxFn)>(
             GetProcAddress(hLoader, "PythonFar_TestSetMessageBoxHook"));
+#if defined(_M_IX86)
+        // On 32-bit MSVC, WINAPI exports are stdcall-decorated unless the DLL
+        // provides an explicit alias. GitHub Actions runs x86 too, so fall back
+        // to the decorated name to keep this test architecture-stable.
+        if (!setHook) {
+            setHook = reinterpret_cast<ShowMessageBoxFn (WINAPI*)(ShowMessageBoxFn)>(
+                GetProcAddress(hLoader, "_PythonFar_TestSetMessageBoxHook@4"));
+        }
+#endif
         ASSERT_NE(openW, nullptr);
-        ASSERT_NE(setHook, nullptr) << "Message-box test hook export missing";
+        ASSERT_NE(setHook, nullptr)
+            << "Message-box test hook export missing; tried PythonFar_TestSetMessageBoxHook"
+#if defined(_M_IX86)
+            << " and _PythonFar_TestSetMessageBoxHook@4"
+#endif
+            ;
 
         {
             std::lock_guard<std::mutex> lock(g_MsgMutex);

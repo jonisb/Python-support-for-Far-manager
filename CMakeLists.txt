@@ -63,7 +63,7 @@ target_link_libraries(PythonFar ${Python3_LIBRARIES})
 set_target_properties(PythonFar PROPERTIES
     PREFIX ""
     OUTPUT_NAME "PythonFar"
-    LINK_FLAGS "/EXPORT:GetGlobalInfoW /EXPORT:SetStartupInfoW /EXPORT:GetPluginInfoW /EXPORT:OpenW /EXPORT:ExitFARW /EXPORT:ProcessSynchroEventW /EXPORT:PythonFar_AdvControl /EXPORT:PythonFar_PanelControl /EXPORT:PythonFar_DialogInit /EXPORT:PythonFar_DialogRun /EXPORT:PythonFar_DialogRunWithTimeout /EXPORT:PythonFar_DialogFree /EXPORT:PythonFar_SendDlgMessage /EXPORT:PythonFar_DefDlgProc /EXPORT:PythonFar_EditorControl /EXPORT:PythonFar_ViewerControl /EXPORT:Initialize=loader_Initialize /EXPORT:IsPlugin=loader_IsPlugin /EXPORT:CreateInstance=loader_CreateInstance /EXPORT:GetFunctionAddress=loader_GetFunctionAddress /EXPORT:GetError=loader_GetError /EXPORT:DestroyInstance=loader_DestroyInstance /EXPORT:Free=loader_Free"
+    LINK_FLAGS "/EXPORT:GetGlobalInfoW /EXPORT:SetStartupInfoW /EXPORT:GetPluginInfoW /EXPORT:OpenW /EXPORT:ExitFARW /EXPORT:ProcessSynchroEventW /EXPORT:PythonFar_AdvControl /EXPORT:PythonFar_PanelControl /EXPORT:PythonFar_DialogInit /EXPORT:PythonFar_DialogRun /EXPORT:PythonFar_DialogRunWithTimeout /EXPORT:PythonFar_DialogFree /EXPORT:PythonFar_SendDlgMessage /EXPORT:PythonFar_DefDlgProc /EXPORT:PythonFar_EditorControl /EXPORT:PythonFar_ViewerControl /EXPORT:PythonFar_TestSetMessageBoxHook /EXPORT:Initialize=loader_Initialize /EXPORT:IsPlugin=loader_IsPlugin /EXPORT:CreateInstance=loader_CreateInstance /EXPORT:GetFunctionAddress=loader_GetFunctionAddress /EXPORT:GetError=loader_GetError /EXPORT:DestroyInstance=loader_DestroyInstance /EXPORT:Free=loader_Free"
 )
 
 # ===== Adapter DLL (PythonFar.adapter.dll) =====
