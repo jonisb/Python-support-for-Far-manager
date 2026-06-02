@@ -56,6 +56,10 @@ jobs:
         cmake --build . --config Release
       shell: cmd
     
+    - name: Copy test plugin
+      run: copy python\test_simple_plugin.py build\Release\test_plugin.far.py
+      shell: cmd
+    
     - name: Run tests
       run: |
         cd build
