@@ -63,7 +63,7 @@ jobs:
     - name: Configure CMake
       run: |
         cd build
-        cmake .. -G "Visual Studio 17 2022" -A ${{ matrix.cmake_platform }} -DPython3_ROOT_DIR="build\Release\python_runtime\DLLs"
+        cmake .. -G "Visual Studio 17 2022" -A ${{ matrix.cmake_platform }} -DPYTHONFAR_RUNTIME_DLLS="%GITHUB_WORKSPACE%\build\Release\python_runtime\DLLs"
       shell: cmd
     
     - name: Build Release
