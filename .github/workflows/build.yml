@@ -69,6 +69,37 @@ jobs:
       run: mkdir build\Release\python
       shell: cmd
     
+    - name: Setup python_runtime
+      run: |
+        $arch = "${{ matrix.arch }}"
+        $version = "3.11.9"
+        $embedArch = if ($arch -eq "x64") { "amd64" } else { "win32" }
+        $url = "https://www.python.org/ftp/python/$version/python-$version-embed-$embedArch.zip"
+        $dest = "build\Release\python_runtime"
+        $temp = "$env:TEMP\pythonfar_embed"
+        
+        New-Item -ItemType Directory -Force -Path $temp | Out-Null
+        New-Item -ItemType Directory -Force -Path "$dest\DLLs" | Out-Null
+        New-Item -ItemType Directory -Force -Path "$dest\Lib" | Out-Null
+        
+        Write-Host "Downloading $url"
+        Invoke-WebRequest -Uri $url -OutFile "$temp\embed.zip" -UseBasicParsing
+        
+        Write-Host "Extracting..."
+        Expand-Archive -Path "$temp\embed.zip" -DestinationPath "$temp\extracted" -Force
+        
+        Write-Host "Copying DLLs and .pyd files..."
+        Get-ChildItem "$temp\extracted" -File | Where-Object { $_.Extension -in @(".dll",".pyd") } |
+            ForEach-Object { Copy-Item $_.FullName "$dest\DLLs\" -Force }
+        
+        Write-Host "Expanding stdlib..."
+        $stdlibZip = "$temp\extracted\python311.zip"
+        Expand-Archive -Path $stdlibZip -DestinationPath "$dest\Lib" -Force
+        
+        Remove-Item $temp -Recurse -Force
+        Write-Host "python_runtime setup complete."
+      shell: pwsh
+    
     - name: Copy test plugin
       run: copy python\test_plugin.far.py build\Release\test_plugin.far.py
       shell: cmd
