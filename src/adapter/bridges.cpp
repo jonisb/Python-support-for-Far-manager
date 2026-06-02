@@ -1,11 +1,10 @@
-#include "../common_log.hpp"
+#include "adapter_log.hpp"
 #include "adapter.hpp"
 #include <sstream>
 #include <string>
 #include <unordered_set>
 #include <thread>
 #include <chrono>
-#include <fstream>
 
 static PluginStartupInfo g_BridgeStartupInfo = {};
 static FarStandardFunctions g_BridgeFSF = {};
@@ -27,12 +26,7 @@ extern "C" {
 static std::unordered_set<HANDLE> g_PendingCloseDialogs;
 
 static void BridgeLog(const char* message) {
-    try {
-        std::string tempPath = PythonFar::SafeGetEnv("TEMP", PythonFar::DEFAULT_TEMP_DIR);
-        std::ofstream log((tempPath + "\\pythonfar_loader.log").c_str(), std::ios::app);
-        if (log.is_open()) log << "[Bridge] " << message << std::endl;
-    } catch (...) {
-    }
+    LOG_TRACE(message);
 }
 
 extern "C" __declspec(dllexport) intptr_t WINAPI PythonFar_AdvControl(

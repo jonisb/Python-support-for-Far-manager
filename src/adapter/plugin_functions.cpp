@@ -1,23 +1,8 @@
-#include "../common_log.hpp"
+#include "adapter_log.hpp"
 #include "adapter.hpp"
-#include <fstream>
-#include <ctime>
 
 static void LogPluginFunc(const char* msg) {
-    // Light-weight logging for debug tracing
-    try {
-        std::string tempPath = PythonFar::SafeGetEnv("TEMP", PythonFar::DEFAULT_TEMP_DIR);
-        std::ofstream log((tempPath + "\\pythonfar_loader.log").c_str(), std::ios::app);
-        if (log.is_open()) {
-            time_t now = time(nullptr);
-            char timestamp[26];
-            ctime_s(timestamp, sizeof(timestamp), &now);
-            timestamp[24] = '\0';
-            log << "[" << timestamp << "] [PluginFunctions] " << msg << std::endl;
-        }
-    } catch (...) {
-        // swallow
-    }
+    LOG_TRACE(msg);
 }
 
 // Error handling wrapper

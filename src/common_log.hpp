@@ -12,7 +12,7 @@ namespace PythonFar {
 
 // Logging Configuration
 // Default temp directory fallback (when TEMP env var is not set)
-static const char* DEFAULT_TEMP_DIR = "C:\\temp";
+inline constexpr const char* DEFAULT_TEMP_DIR = "C:\\temp";
 
 // Safe environment variable getter (replaces unsafe getenv)
 inline std::string SafeGetEnv(const char* name, const std::string& defaultValue = "") {
@@ -34,17 +34,30 @@ enum class LogLevel {
 
 class Logger {
 public:
-    static Logger& GetInstance() {
-        static Logger instance;
-        return instance;
+    Logger(const std::string& logFileName) : m_logFileName(logFileName) {
+        std::string tempDir = SafeGetEnv("TEMP", DEFAULT_TEMP_DIR);
+        std::string logPath = tempDir + "\\" + logFileName;
+        
+        // Clear log on initialization (truncate mode)
+        m_logFile.open(logPath, std::ios::trunc);
+        m_logFile.close();
+        
+        // Reopen in append mode
+        m_logFile.open(logPath, std::ios::app);
+        
+        // Check environment variable for log level
+        std::string levelStr = SafeGetEnv("PYTHONFAR_LOG_LEVEL");
+        if (!levelStr.empty()) {
+            if (levelStr == "TRACE" || levelStr == "0") m_minLevel = LogLevel::Trace;
+            else if (levelStr == "INFO" || levelStr == "1") m_minLevel = LogLevel::Info;
+            else if (levelStr == "ERROR" || levelStr == "2") m_minLevel = LogLevel::Error;
+        }
     }
-
-    void SetLogFile(const std::string& filepath) {
-        std::lock_guard<std::mutex> lock(m_mutex);
+    
+    ~Logger() {
         if (m_logFile.is_open()) {
             m_logFile.close();
         }
-        m_logFile.open(filepath, std::ios::app);
     }
 
     void Log(LogLevel level, const char* file, int line, const std::string& message) {
@@ -77,41 +90,22 @@ public:
             m_logFile.flush();
         }
         
-        // Also write to std::cerr if not trace
+        // Also write to std::cerr if error
         if (level >= LogLevel::Error) {
             std::cerr << logStr;
         }
     }
 
 private:
-    Logger() {
-        // Default log file - use safe environment variable getter
-        // DEFAULT_TEMP_DIR is defined in GlobalInfo.hpp and accessible in this namespace
-        std::string tempDir = SafeGetEnv("TEMP", DEFAULT_TEMP_DIR);
-        std::string logPath = tempDir + "\\pythonfar_loader.log";
-        m_logFile.open(logPath, std::ios::app);
-        
-        // Check environment variable for log level
-        std::string levelStr = SafeGetEnv("PYTHONFAR_LOG_LEVEL");
-        if (!levelStr.empty()) {
-            if (levelStr == "TRACE" || levelStr == "0") m_minLevel = LogLevel::Trace;
-            else if (levelStr == "INFO" || levelStr == "1") m_minLevel = LogLevel::Info;
-            else if (levelStr == "ERROR" || levelStr == "2") m_minLevel = LogLevel::Error;
-        }
-    }
-    ~Logger() {
-        if (m_logFile.is_open()) {
-            m_logFile.close();
-        }
-    }
-
     std::ofstream m_logFile;
     std::mutex m_mutex;
-    
+    std::string m_logFileName;
     LogLevel m_minLevel = LogLevel::Trace;
 };
 
-} // namespace PythonFar
+// Forward declarations - defined in logger.cpp
+Logger& GetLoaderLogger();
+Logger& GetAdapterLogger();
 
 // Utility function for converting wide strings to UTF-8 for logging
 inline std::string WideToUTF8(const wchar_t* wide) {
@@ -123,6 +117,24 @@ inline std::string WideToUTF8(const wchar_t* wide) {
     return result;
 }
 
-#define LOG_TRACE(msg) do { std::ostringstream ss; ss << msg; PythonFar::Logger::GetInstance().Log(PythonFar::LogLevel::Trace, __FILE__, __LINE__, ss.str()); } while(0)
-#define LOG_INFO(msg)  do { std::ostringstream ss; ss << msg; PythonFar::Logger::GetInstance().Log(PythonFar::LogLevel::Info, __FILE__, __LINE__, ss.str()); } while(0)
-#define LOG_ERROR(msg) do { std::ostringstream ss; ss << msg; PythonFar::Logger::GetInstance().Log(PythonFar::LogLevel::Error, __FILE__, __LINE__, ss.str()); } while(0)
+} // namespace PythonFar
+
+// Keep WideToUTF8 available unqualified for existing call sites
+using PythonFar::WideToUTF8;
+
+// Core logging macro - logs to the given logger instance.
+// Each translation unit defines LOG_TRACE/LOG_INFO/LOG_ERROR in terms of this
+// by selecting which logger to use (see PYTHONFAR_LOGGER below).
+#define PYTHONFAR_LOG(logger, lvl, msg) \
+    do { std::ostringstream _ss; _ss << msg; \
+         (logger).Log(PythonFar::LogLevel::lvl, __FILE__, __LINE__, _ss.str()); } while(0)
+
+// A translation unit may define PYTHONFAR_LOGGER before including this header
+// (or any header that includes it) to select its logger. Defaults to the loader.
+#ifndef PYTHONFAR_LOGGER
+#define PYTHONFAR_LOGGER PythonFar::GetLoaderLogger()
+#endif
+
+#define LOG_TRACE(msg) PYTHONFAR_LOG(PYTHONFAR_LOGGER, Trace, msg)
+#define LOG_INFO(msg)  PYTHONFAR_LOG(PYTHONFAR_LOGGER, Info,  msg)
+#define LOG_ERROR(msg) PYTHONFAR_LOG(PYTHONFAR_LOGGER, Error, msg)

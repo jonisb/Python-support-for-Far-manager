@@ -1,4 +1,4 @@
-#include "../common_log.hpp"
+#include "adapter_log.hpp"
 #include "../GlobalInfo.hpp"
 #include "adapter.hpp"
 #include <fstream>
