@@ -99,8 +99,9 @@ add_executable(pythonfar_tests
     tests/test_main.cpp
     tests/test_loader.cpp
     tests/test_adapter.cpp
+    tests/test_common_log.cpp
 )
-target_include_directories(pythonfar_tests PRIVATE src/loader src/adapter)
+target_include_directories(pythonfar_tests PRIVATE src src/loader src/adapter)
 target_link_libraries(pythonfar_tests
     gtest_main
     ${Python3_LIBRARIES}
@@ -109,6 +110,22 @@ target_link_libraries(pythonfar_tests
 add_test(NAME PythonFarTests 
          COMMAND pythonfar_tests
          WORKING_DIRECTORY "$<TARGET_FILE_DIR:pythonfar_tests>")
+
+# Copy python/test_plugin.far.py next to the test executable. This fixture is
+# REQUIRED by the adapter tests, so fail loudly at configure time if it is
+# missing instead of silently skipping the copy (which would make the tests
+# fail at runtime for a non-obvious reason).
+set(PYTHONFAR_TEST_PLUGIN "${CMAKE_CURRENT_SOURCE_DIR}/python/test_plugin.far.py")
+if(NOT EXISTS "${PYTHONFAR_TEST_PLUGIN}")
+    message(FATAL_ERROR "Required test fixture not found: ${PYTHONFAR_TEST_PLUGIN}")
+endif()
+add_custom_command(TARGET pythonfar_tests POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${PYTHONFAR_TEST_PLUGIN}"
+        "$<TARGET_FILE_DIR:pythonfar_tests>/test_plugin.far.py"
+    COMMENT "Copying test plugin fixture to test output directory"
+    VERBATIM
+)
 
 # ===== Struct Dumper =====
 # struct_dumper emits compiler-truth struct offsets to JSON. It runs as a
