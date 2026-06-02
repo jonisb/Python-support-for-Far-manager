@@ -49,8 +49,8 @@ jobs:
     
     - name: Create build directory
       run: |
-        mkdir -p build
-        mkdir -p logs
+        if not exist build mkdir build
+        if not exist logs mkdir logs
       shell: cmd
     
     - name: Build Release
