@@ -416,3 +416,88 @@ TEST_F(AdapterTestFixture, DestroyInstance_NullIsSafe) {
     destroyInstanceFunc(nullptr);
     SUCCEED();
 }
+
+// Regression: non-ASCII plugin metadata (title/description/author) read in the
+// PluginModule constructor must be decoded from UTF-8 to UTF-16 correctly, not
+// byte-widened. GetGlobalInfoW exposes m_Title etc., so we verify the exact
+// wide string round-trips.
+TEST_F(AdapterTestFixture, GetGlobalInfoW_NonAsciiMetadataDecodedCorrectly) {
+    // The Python source declares title/description/author with Cyrillic text.
+    // Source bytes are UTF-8 (Python defaults to UTF-8 for .py files).
+    //   title       = "Заголовок"  (U+0417 0430 0433 043E 043B 043E 0432 043E 043A)
+    //   author      = "Автор"      (U+0410 0432 0442 043E 0440)
+    // The string literals below are the UTF-8 byte encodings of those.
+    std::string source =
+        "class Plugin:\n"
+        "    title = '\xD0\x97\xD0\xB0\xD0\xB3\xD0\xBE\xD0\xBB\xD0\xBE\xD0\xB2\xD0\xBE\xD0\xBA'\n"  // Заголовок
+        "    description = 'desc'\n"
+        "    author = '\xD0\x90\xD0\xB2\xD1\x82\xD0\xBE\xD1\x80'\n"  // Автор
+        "    version = (1, 2, 3, 4)\n"
+        "    def __init__(self, psi_ptr=None):\n"
+        "        pass\n"
+        "    def get_plugin_info(self):\n"
+        "        return {'title': self.title}\n";
+    std::wstring path = WritePlugin(L"nonascii_meta.far.py", source);
+
+    HANDLE instance = createInstanceFunc(path.c_str());
+    ASSERT_NE(instance, nullptr);
+    ASSERT_NE(instance, INVALID_HANDLE_VALUE);
+
+    typedef void (WINAPI *GetGlobalInfoWFunc)(GlobalInfo*);
+    GetGlobalInfoWFunc getGlobalInfoW =
+        reinterpret_cast<GetGlobalInfoWFunc>(getFunctionAddressFunc(instance, L"GetGlobalInfoW"));
+    ASSERT_NE(getGlobalInfoW, nullptr);
+
+    GlobalInfo gi;
+    memset(&gi, 0, sizeof(gi));
+    gi.StructSize = sizeof(GlobalInfo);
+    gi.Instance = instance;  // the wrapper resolves the PluginModule via Instance
+    getGlobalInfoW(&gi);
+
+    // Expected UTF-16 code points (NOT byte-widened UTF-8).
+    const wchar_t expectedTitle[] = {
+        0x0417, 0x0430, 0x0433, 0x043E, 0x043B, 0x043E, 0x0432, 0x043E, 0x043A, 0
+    };
+    const wchar_t expectedAuthor[] = { 0x0410, 0x0432, 0x0442, 0x043E, 0x0440, 0 };
+
+    ASSERT_NE(gi.Title, nullptr);
+    EXPECT_STREQ(gi.Title, expectedTitle) << "Title must be valid UTF-16, not byte-widened UTF-8";
+    ASSERT_NE(gi.Author, nullptr);
+    EXPECT_STREQ(gi.Author, expectedAuthor) << "Author must be valid UTF-16";
+
+    // Length sanity: byte-widening would have produced 18 chars for the title
+    // (9 code points * 2 UTF-8 bytes), the correct value is 9.
+    EXPECT_EQ(wcslen(gi.Title), static_cast<size_t>(9));
+
+    EXPECT_TRUE(destroyInstanceFunc(instance));
+}
+
+// Regression: when a plugin module fails to execute (raises at import time)
+// with a non-ASCII error message, CreatePluginModule records the message in
+// the adapter error description. That UTF-8 message must be decoded to UTF-16
+// correctly (via MultiByteToWideChar), not byte-widened.
+TEST_F(AdapterTestFixture, CreateInstance_NonAsciiImportError_DecodedCorrectly) {
+    // Module-level `raise` with a Cyrillic message "Ошибка" (U+041E 0448 0438
+    // 0431 043A 0430). Source bytes below are its UTF-8 encoding.
+    std::string source =
+        "raise RuntimeError('\xD0\x9E\xD1\x88\xD0\xB8\xD0\xB1\xD0\xBA\xD0\xB0')\n";  // Ошибка
+    std::wstring path = WritePlugin(L"import_error_nonascii.far.py", source);
+
+    HANDLE instance = createInstanceFunc(path.c_str());
+    EXPECT_EQ(instance, nullptr) << "Module that raises at import must fail to load";
+
+    GetErrorFunc getErrorFunc =
+        reinterpret_cast<GetErrorFunc>(GetProcAddress(hAdapter, "adapter_GetError"));
+    ASSERT_NE(getErrorFunc, nullptr);
+
+    ErrorInfo err = {};
+    err.StructSize = sizeof(ErrorInfo);
+    ASSERT_TRUE(getErrorFunc(&err)) << "GetError should report the import failure";
+    ASSERT_NE(err.Description, nullptr);
+
+    // The description must contain the correctly-decoded Cyrillic substring.
+    const wchar_t expected[] = { 0x041E, 0x0448, 0x0438, 0x0431, 0x043A, 0x0430, 0 };
+    std::wstring desc(err.Description);
+    EXPECT_NE(desc.find(expected), std::wstring::npos)
+        << "Error description must contain valid UTF-16 'Ошибка', not byte-widened UTF-8";
+}

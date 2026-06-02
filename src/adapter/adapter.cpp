@@ -407,7 +407,9 @@ std::unique_ptr<PluginModule> PythonFarAdapter::CreatePluginModule(const wchar_t
             }
             
             m_ErrorSummary = L"Import Error";
-            m_ErrorDescription = L"Failed to execute module: " + std::wstring(errorMsg.begin(), errorMsg.end());
+            // errorMsg is UTF-8 (from PyUnicode_AsUTF8); decode it properly to
+            // UTF-16 so non-ASCII Python error text is not corrupted.
+            m_ErrorDescription = L"Failed to execute module: " + PythonFar::UTF8ToWide(errorMsg);
             
             return nullptr;
         }
@@ -717,7 +719,10 @@ PluginModule::PluginModule(const std::wstring& filename, PyObject* module, PyObj
             PyObj obj = PyObject_GetAttrString(m_PluginInstance, attr);
             if (obj && PyUnicode_Check(obj)) {
                 const char* s = PyUnicode_AsUTF8(obj);
-                if (s) dest = std::wstring(s, s + strlen(s));
+                // PyUnicode_AsUTF8 returns UTF-8; decode it properly to UTF-16
+                // so non-ASCII metadata (titles, descriptions, authors) is not
+                // corrupted by byte-wise widening.
+                if (s) dest = PythonFar::UTF8ToWide(s);
             }
             PyErr_Clear();
         };
