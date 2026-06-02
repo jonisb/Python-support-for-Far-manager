@@ -10,7 +10,7 @@
 #
 # Usage:
 #   .\setup_runtime.ps1 -BuildDir "build\Release" -Destination "build\Release"
-#   .\setup_runtime.ps1 -BuildDir "FarPortable\Adapters"
+#   .\setup_runtime.ps1 -BuildDir "FarPortable\Adapters" -Arch x86
 #   .\setup_runtime.ps1 -UseFallback  # Use local Python installation
 #
 # Environment Variables (optional):
@@ -21,6 +21,7 @@
 param(
     [string]$BuildDir = "build\Release",
     [string]$Destination = "",
+    [string]$Arch = "x64",   # x64 or x86
     [switch]$UseFallback = $false,
     [switch]$NoCleanup = $false
 )
@@ -33,7 +34,8 @@ $VerbosePreference = "Continue"
 # Note: 3.11.9 is the last Python 3.11 release with an official embeddable package.
 # Newer 3.11.x releases (3.11.10+) are source-only and have no -embed-amd64.zip.
 $PYTHON_VERSION = "3.11.9"
-$PYTHON_EMBED_URL = "https://www.python.org/ftp/python/$PYTHON_VERSION/python-$PYTHON_VERSION-embed-amd64.zip"
+$embedArch = if ($Arch -eq "x86") { "win32" } else { "amd64" }
+$PYTHON_EMBED_URL = "https://www.python.org/ftp/python/$PYTHON_VERSION/python-$PYTHON_VERSION-embed-$embedArch.zip"
 $TEMP_DIR = Join-Path $env:TEMP "pythonfar_setup"
 $SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
 
@@ -340,7 +342,9 @@ function Copy-Runtime {
     
     # Create directory structure
     New-Item -ItemType Directory -Path "$PYTHON_RUNTIME_DIR\DLLs" -Force | Out-Null
-    Write-Success "Created: $PYTHON_RUNTIME_DIR\DLLs"
+    New-Item -ItemType Directory -Path "$PYTHON_RUNTIME_DIR\Lib" -Force | Out-Null
+    New-Item -ItemType Directory -Path "$PYTHON_RUNTIME_DIR\site-packages" -Force | Out-Null
+    Write-Success "Created: $PYTHON_RUNTIME_DIR\DLLs, Lib, site-packages"
     
     # Copy Python DLLs
     Write-Host ""
