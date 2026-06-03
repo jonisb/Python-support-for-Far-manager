@@ -138,9 +138,6 @@ if(NOT PYTHONFAR_CROSS_BUILD)
         "$<TARGET_FILE_DIR:PythonFar>/far_struct_offsets.json"
         "${CMAKE_CURRENT_SOURCE_DIR}/python/far_struct_offsets.json"
     )
-        "$<TARGET_FILE_DIR:PythonFar>/far_struct_offsets.json"
-        "${CMAKE_CURRENT_SOURCE_DIR}/python/far_struct_offsets.json"
-    )
 endif()
 
 # ===== Install =====
