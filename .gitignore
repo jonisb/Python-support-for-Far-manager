@@ -79,3 +79,4 @@ $RECYCLE.BIN/
 *.lnk
 /build
 build_log.txt
+python/far_struct_offsets.json

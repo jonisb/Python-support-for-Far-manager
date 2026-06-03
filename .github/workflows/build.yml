@@ -12,10 +12,34 @@ env:
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
+      fail-fast: false
       matrix:
-        architecture: [x64, x86]
+        include:
+          # Native x64 build + tests on the standard x64 runner.
+          - arch: x64
+            cmake_platform: x64
+            runner: windows-latest
+            run_tests: true
+          # x86 (Win32) binaries run fine on the x64 runner, so test natively.
+          - arch: x86
+            cmake_platform: Win32
+            runner: windows-latest
+            run_tests: true
+          # ARM64 cross-build on the x64 runner: always builds, but the
+          # resulting binaries cannot execute here, so tests are skipped.
+          - arch: arm64
+            cmake_platform: ARM64
+            runner: windows-latest
+            run_tests: false
+          # ARM64 native build + tests on GitHub's ARM64 runner (full coverage).
+          - arch: arm64
+            cmake_platform: ARM64
+            runner: windows-11-arm
+            run_tests: true
+    
+    name: ${{ matrix.arch }} (${{ matrix.runner }})
     
     steps:
     - uses: actions/checkout@v6
@@ -26,12 +50,19 @@ jobs:
         vs-version: '17.0'
     
     - name: Create build directory
-      run: mkdir -p build
+      run: |
+        if not exist build mkdir build
+        if not exist logs mkdir logs
+      shell: cmd
+    
+    - name: Download self-contained Python (${{ matrix.arch }})
+      run: .\setup_python.ps1 -Arch ${{ matrix.arch }}
+      shell: pwsh
     
     - name: Configure CMake
       run: |
         cd build
-        cmake .. -G "Visual Studio 17 2022" -A ${{ matrix.architecture }}
+        cmake .. -G "Visual Studio 17 2022" -A ${{ matrix.cmake_platform }}
       shell: cmd
     
     - name: Build Release
@@ -40,14 +71,64 @@ jobs:
         cmake --build . --config Release
       shell: cmd
     
-    - name: Upload DLL artifacts
+    - name: Copy test plugin
+      if: ${{ matrix.run_tests }}
+      run: copy python\test_plugin.far.py build\Release\test_plugin.far.py
+      shell: cmd
+    
+    - name: Copy runtime DLLs next to test exe
+      if: ${{ matrix.run_tests }}
+      run: |
+        # Place runtime DLLs next to the test exe so it loads the SAME
+        # python311.dll that matches python_runtime\Lib (no system Python).
+        Copy-Item "build\Release\python_runtime\DLLs\*.dll" "build\Release\" -Force
+        Copy-Item "build\Release\python_runtime\DLLs\*.pyd" "build\Release\" -Force -ErrorAction SilentlyContinue
+      shell: pwsh
+    
+    - name: Run tests
+      if: ${{ matrix.run_tests }}
+      run: |
+        cd build
+        ctest --output-on-failure -C Release
+      shell: cmd
+    
+    - name: Copy logs to workspace
+      if: always()
+      run: |
+        copy "%TEMP%\pythonfar_*.log" logs\ 2>nul
+        dir logs\
+      shell: cmd
+    
+    - name: Upload log files
+      if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: pythonfar-dlls-${{ matrix.architecture }}
+        name: pythonfar-logs-${{ matrix.arch }}-${{ matrix.runner }}
+        path: logs\*.log
+        if-no-files-found: ignore
+    
+    - name: Upload DLL artifacts
+      # Cross-build and native ARM64 produce identical DLLs; only upload from
+      # one ARM64 job (the native runner) to avoid duplicate artifact names.
+      if: ${{ matrix.arch != 'arm64' || matrix.run_tests }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: pythonfar-dlls-${{ matrix.arch }}
         path: |
           build/Release/PythonFar.dll
           build/Release/PythonFar.adapter.dll
           python/far_struct_offsets.json
         retention-days: 30
     
-
+    - name: Create release
+      if: ${{ startsWith(github.ref, 'refs/tags/v') && (matrix.arch != 'arm64' || matrix.run_tests) }}
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          build/Release/PythonFar.dll
+          build/Release/PythonFar.adapter.dll
+          python/far_struct_offsets.json
+        draft: false
+        prerelease: ${{ contains(github.ref, 'rc') || contains(github.ref, 'beta') }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
