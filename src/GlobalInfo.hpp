@@ -34,10 +34,11 @@ static constexpr unsigned long MIN_FAR_VERSION_BUILD = 0;
 static constexpr unsigned long MIN_FAR_VERSION_REVISION = 0;
 
 // PythonFar plugin version
-static constexpr unsigned long PLUGIN_VERSION_MAJOR = 1;
+static constexpr unsigned long PLUGIN_VERSION_MAJOR = 0;
 static constexpr unsigned long PLUGIN_VERSION_MINOR = 0;
 static constexpr unsigned long PLUGIN_VERSION_BUILD = 0;
 static constexpr unsigned long PLUGIN_VERSION_REVISION = 0;
+static constexpr enum VERSION_STAGE PLUGIN_VERSION_STAGE = VS_PRIVATE;
 
 // ===== Plugin GUIDs =====
 // Loader plugin GUID (adapter loader)
@@ -93,7 +94,7 @@ inline void InitializeGlobalInfo(GlobalInfo* Info, const GUID& guid,
                                         VS_RELEASE);
     Info->Version = MAKEFARVERSION(PLUGIN_VERSION_MAJOR, PLUGIN_VERSION_MINOR, 
                                    PLUGIN_VERSION_BUILD, PLUGIN_VERSION_REVISION, 
-                                   VS_RELEASE);
+                                   PLUGIN_VERSION_STAGE);
     Info->Guid = guid;
     Info->Title = title;
     Info->Description = description;
