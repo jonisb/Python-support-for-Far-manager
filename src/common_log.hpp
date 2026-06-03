@@ -100,7 +100,7 @@ private:
     std::ofstream m_logFile;
     std::mutex m_mutex;
     std::string m_logFileName;
-    LogLevel m_minLevel = LogLevel::Trace;
+    LogLevel m_minLevel = LogLevel::Error;
 };
 
 // Forward declarations - defined in logger.cpp
