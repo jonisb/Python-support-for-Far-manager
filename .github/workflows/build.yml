@@ -72,11 +72,6 @@ jobs:
         cmake --build . --config Release
       shell: cmd
     
-    - name: Copy test plugin
-      if: ${{ matrix.run_tests }}
-      run: copy python\test_plugin.far.py build\Release\test_plugin.far.py
-      shell: cmd
-    
     - name: Copy runtime DLLs next to test exe
       if: ${{ matrix.run_tests }}
       run: |
