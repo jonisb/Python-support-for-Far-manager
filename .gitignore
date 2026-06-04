@@ -80,3 +80,4 @@ $RECYCLE.BIN/
 /build
 build_log.txt
 python/far_struct_offsets.json
+/far_test
