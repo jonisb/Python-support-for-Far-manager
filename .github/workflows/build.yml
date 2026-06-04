@@ -209,6 +209,6 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: far-deploy-verify-${{ matrix.far_tag == 'latest' && 'latest' || matrix.far_tag }}-${{ matrix.arch }}
+        name: far-deploy-verify-${{ steps.far_tag.outputs.safe }}-${{ matrix.arch }}
         path: deploy-verify-*.txt
         if-no-files-found: ignore
