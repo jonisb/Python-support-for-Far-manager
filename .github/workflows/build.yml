@@ -56,10 +56,22 @@ jobs:
         path: build/Release/python_runtime
         key: python-runtime-3.11.9-${{ matrix.arch }}
 
+    - name: Cache python SDK (${{ matrix.arch }})
+      uses: actions/cache@v4
+      with:
+        path: build/python_sdk
+        key: python-sdk-3.11.9-${{ matrix.arch }}
+
     - name: Download self-contained Python (${{ matrix.arch }})
       run: .\setup_python.ps1 -Arch ${{ matrix.arch }}
       shell: pwsh
     
+    - name: Cache googletest (${{ matrix.arch }})
+      uses: actions/cache@v4
+      with:
+        path: build/_deps
+        key: gtest-v1.14.0-${{ matrix.cmake_platform }}
+
     - name: Configure CMake
       run: |
         cd build
