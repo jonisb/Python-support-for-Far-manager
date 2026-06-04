@@ -39,7 +39,7 @@ jobs:
             cmake_platform: ARM64
             runner: windows-11-arm
             run_tests: true
-    
+
     name: ${{ matrix.arch }} (${{ matrix.runner }})
     
     steps:
@@ -56,6 +56,12 @@ jobs:
         if not exist logs mkdir logs
       shell: cmd
     
+    - name: Cache python_runtime (${{ matrix.arch }})
+      uses: actions/cache@v4
+      with:
+        path: build/Release/python_runtime
+        key: python-runtime-3.11.9-${{ matrix.arch }}
+
     - name: Download self-contained Python (${{ matrix.arch }})
       run: .\setup_python.ps1 -Arch ${{ matrix.arch }}
       shell: pwsh
@@ -113,18 +119,96 @@ jobs:
         path: |
           build/Release/PythonFar.dll
           build/Release/PythonFar.adapter.dll
-          python/far_struct_offsets.json
+          build/Release/python/**
         retention-days: 30
-    
-    - name: Create release
-      if: ${{ startsWith(github.ref, 'refs/tags/v') && (matrix.arch != 'arm64' || matrix.run_tests) }}
-      uses: softprops/action-gh-release@v1
+
+  deploy-far:
+    name: Deploy to Far ${{ matrix.far_tag }} (${{ matrix.arch }})
+    needs: build
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        far_tag:
+          - latest
+          - ci/v3.0.6687.4869
+        arch:
+          - x64
+          - x86
+          - arm64
+
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Download built PythonFar artifacts (${{ matrix.arch }})
+      uses: actions/download-artifact@v4
       with:
-        files: |
-          build/Release/PythonFar.dll
-          build/Release/PythonFar.adapter.dll
-          python/far_struct_offsets.json
-        draft: false
-        prerelease: ${{ contains(github.ref, 'rc') || contains(github.ref, 'beta') }}
+        name: pythonfar-dlls-${{ matrix.arch }}
+        path: artifacts
+
+    - name: Restore python_runtime from cache (${{ matrix.arch }})
+      uses: actions/cache@v4
+      with:
+        path: artifacts/python_runtime
+        key: python-runtime-3.11.9-${{ matrix.arch }}
+
+    - name: Resolve Far Manager tag
+      id: resolve_far_tag
+      run: |
+        if ('${{ matrix.far_tag }}' -eq 'latest') {
+            $headers = @{
+                'User-Agent'    = 'PythonFar-CI'
+                'Authorization' = "Bearer ${{ secrets.GITHUB_TOKEN }}"
+            }
+            $tag = (Invoke-RestMethod `
+                -Uri 'https://api.github.com/repos/FarGroup/FarManager/releases?per_page=1' `
+                -Headers $headers | Select-Object -First 1).tag_name
+        } else {
+            $tag = '${{ matrix.far_tag }}'
+        }
+        $safeTag = $tag -replace '[/\\]', '-'
+        Write-Host "Resolved tag: $tag (safe: $safeTag)"
+        "tag=$tag"     >> $env:GITHUB_OUTPUT
+        "safe_tag=$safeTag" >> $env:GITHUB_OUTPUT
+      shell: pwsh
+
+    - name: Cache Far Manager (${{ matrix.arch }})
+      uses: actions/cache@v4
+      with:
+        path: far
+        key: far-${{ steps.resolve_far_tag.outputs.safe_tag }}-${{ matrix.arch }}
+
+    - name: Download Far Manager and deploy adapter
+      run: |
+        $params = @{
+            Tag   = '${{ steps.resolve_far_tag.outputs.tag }}'
+            Arch  = '${{ matrix.arch }}'
+            Build = 'artifacts'
+            Dest  = 'far'
+        }
+        .\setup_far.ps1 @params
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      shell: pwsh
+
+    - name: Verify deployment
+      if: always()
+      run: |
+        $safeTag = '${{ matrix.far_tag }}' -replace '[/\\]', '-'
+        $dest    = "far\Adapters"
+        if (Test-Path $dest) {
+            Get-ChildItem -Recurse $dest | Select-Object FullName, Length | Format-Table | Out-String |
+                Set-Content "deploy-verify-$safeTag-${{ matrix.arch }}.txt"
+            Get-ChildItem -Recurse $dest
+        } else {
+            Write-Host "Adapters dir not found: $dest"
+        }
+      shell: pwsh
+
+    - name: Upload deployment verification
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: far-deploy-verify-${{ matrix.far_tag == 'latest' && 'latest' || matrix.far_tag }}-${{ matrix.arch }}
+        path: deploy-verify-*.txt
+        if-no-files-found: ignore
