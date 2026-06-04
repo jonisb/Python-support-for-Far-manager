@@ -153,7 +153,7 @@ jobs:
         key: python-runtime-3.11.9-${{ matrix.arch }}
 
     - name: Resolve Far Manager tag
-      id: resolve_far_tag
+      id: far_tag
       run: |
         if ('${{ matrix.far_tag }}' -eq 'latest') {
             $headers = @{
@@ -166,22 +166,22 @@ jobs:
         } else {
             $tag = '${{ matrix.far_tag }}'
         }
-        $safeTag = $tag -replace '[/\\]', '-'
-        Write-Host "Resolved tag: $tag (safe: $safeTag)"
-        "tag=$tag"     >> $env:GITHUB_OUTPUT
-        "safe_tag=$safeTag" >> $env:GITHUB_OUTPUT
+        $safe = $tag -replace '[/\\]', '-'
+        Write-Host "Resolved tag: $tag (safe: $safe)"
+        "tag=$tag"       >> $env:GITHUB_OUTPUT
+        "safe=$safe"     >> $env:GITHUB_OUTPUT
       shell: pwsh
 
     - name: Cache Far Manager (${{ matrix.arch }})
       uses: actions/cache@v4
       with:
         path: far
-        key: far-${{ steps.resolve_far_tag.outputs.safe_tag }}-${{ matrix.arch }}
+        key: far-${{ steps.far_tag.outputs.safe }}-${{ matrix.arch }}
 
     - name: Download Far Manager and deploy adapter
       run: |
         $params = @{
-            Tag   = '${{ steps.resolve_far_tag.outputs.tag }}'
+            Tag   = '${{ steps.far_tag.outputs.tag }}'
             Arch  = '${{ matrix.arch }}'
             Build = 'artifacts'
             Dest  = 'far'
