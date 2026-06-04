@@ -140,6 +140,22 @@ if(NOT PYTHONFAR_CROSS_BUILD)
     )
 endif()
 
+# ===== Copy Python scripts to build output =====
+# Copies runtime python scripts (*.py, excluding test fixtures) to
+# <build>/Release/python so that setup_far.ps1 and the CI artifact always
+# have the scripts in a known location relative to the built DLLs.
+file(GLOB PYTHONFAR_PYTHON_SCRIPTS "${CMAKE_CURRENT_SOURCE_DIR}/python/*.py")
+list(FILTER PYTHONFAR_PYTHON_SCRIPTS EXCLUDE REGEX ".*test_.*\\.py$")
+foreach(script IN LISTS PYTHONFAR_PYTHON_SCRIPTS)
+    add_custom_command(TARGET PythonFar.adapter POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${script}"
+            "$<TARGET_FILE_DIR:PythonFar.adapter>/python/"
+        COMMENT "Copying ${script} to build output"
+        VERBATIM
+    )
+endforeach()
+
 # ===== Install =====
 install(TARGETS PythonFar PythonFar.adapter
     RUNTIME DESTINATION .
