@@ -53,7 +53,7 @@ jobs:
     - name: Cache python_runtime (${{ matrix.arch }})
       uses: actions/cache@v4
       with:
-        path: build/Release/python_runtime
+        path: build/Release/PythonFar/python_runtime
         key: python-runtime-3.11.9-${{ matrix.arch }}
 
     - name: Cache python SDK (${{ matrix.arch }})
@@ -89,8 +89,8 @@ jobs:
       run: |
         # Place runtime DLLs next to the test exe so it loads the SAME
         # python311.dll that matches python_runtime\Lib (no system Python).
-        Copy-Item "build\Release\python_runtime\DLLs\*.dll" "build\Release\" -Force
-        Copy-Item "build\Release\python_runtime\DLLs\*.pyd" "build\Release\" -Force -ErrorAction SilentlyContinue
+        Copy-Item "build\Release\PythonFar\python_runtime\DLLs\*.dll" "build\Release\" -Force
+        Copy-Item "build\Release\PythonFar\python_runtime\DLLs\*.pyd" "build\Release\" -Force -ErrorAction SilentlyContinue
       shell: pwsh
     
     - name: Run tests
@@ -123,9 +123,9 @@ jobs:
       with:
         name: pythonfar-dlls-${{ matrix.arch }}
         path: |
-          build/Release/PythonFar.dll
-          build/Release/PythonFar.adapter.dll
-          build/Release/python/**
+          build/Release/PythonFar/PythonFar.dll
+          build/Release/PythonFar/PythonFar.adapter.dll
+          build/Release/PythonFar/python/**
         retention-days: 30
 
   deploy-far:
@@ -201,7 +201,7 @@ jobs:
       if: always()
       run: |
         $safeTag = '${{ matrix.far_tag }}' -replace '[/\\]', '-'
-        $dest    = "far\Adapters"
+        $dest    = "far\Adapters\PythonFar"
         if (Test-Path $dest) {
             Get-ChildItem -Recurse $dest | Select-Object FullName, Length | Format-Table | Out-String |
                 Set-Content "deploy-verify-$safeTag-${{ matrix.arch }}.txt"
