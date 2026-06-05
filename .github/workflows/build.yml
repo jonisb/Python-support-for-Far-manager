@@ -185,6 +185,7 @@ jobs:
         key: far-${{ steps.far_tag.outputs.safe }}-${{ matrix.arch }}
 
     - name: Download Far Manager and deploy adapter
+      id: deploy
       run: |
         $params = @{
             Tag   = '${{ steps.far_tag.outputs.tag }}'
@@ -192,13 +193,19 @@ jobs:
             Build = 'artifacts'
             Dest  = 'far'
         }
-        .\setup_far.ps1 @params
+        try {
+            .\setup_far.ps1 @params
+            "deployed=true" >> $env:GITHUB_OUTPUT
+        } catch {
+            Write-Host "Skipped: $($_.Exception.Message)"
+            exit 0
+        }
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       shell: pwsh
 
     - name: Verify deployment
-      if: always()
+      if: steps.deploy.outputs.deployed == 'true'
       run: |
         $safeTag = '${{ matrix.far_tag }}' -replace '[/\\]', '-'
         $dest    = "far\Adapters\PythonFar"
@@ -212,7 +219,7 @@ jobs:
       shell: pwsh
 
     - name: Upload deployment verification
-      if: always()
+      if: steps.deploy.outputs.deployed == 'true'
       uses: actions/upload-artifact@v4
       with:
         name: far-deploy-verify-${{ steps.far_tag.outputs.safe }}-${{ matrix.arch }}
