@@ -61,6 +61,7 @@ target_link_libraries(PythonFar ${Python3_LIBRARIES})
 set_target_properties(PythonFar PROPERTIES
     PREFIX ""
     OUTPUT_NAME "PythonFar"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/$<CONFIG>/PythonFar"
     LINK_FLAGS "/EXPORT:GetGlobalInfoW /EXPORT:SetStartupInfoW /EXPORT:GetPluginInfoW /EXPORT:OpenW /EXPORT:ExitFARW /EXPORT:ProcessSynchroEventW /EXPORT:PythonFar_AdvControl /EXPORT:PythonFar_PanelControl /EXPORT:PythonFar_DialogInit /EXPORT:PythonFar_DialogRun /EXPORT:PythonFar_DialogRunWithTimeout /EXPORT:PythonFar_DialogFree /EXPORT:PythonFar_SendDlgMessage /EXPORT:PythonFar_DefDlgProc /EXPORT:PythonFar_EditorControl /EXPORT:PythonFar_ViewerControl /EXPORT:PythonFar_TestSetMessageBoxHook /EXPORT:Initialize=loader_Initialize /EXPORT:IsPlugin=loader_IsPlugin /EXPORT:CreateInstance=loader_CreateInstance /EXPORT:GetFunctionAddress=loader_GetFunctionAddress /EXPORT:GetError=loader_GetError /EXPORT:DestroyInstance=loader_DestroyInstance /EXPORT:Free=loader_Free"
 )
 
@@ -78,7 +79,8 @@ target_link_libraries(PythonFar.adapter ${Python3_LIBRARIES})
 set_target_properties(PythonFar.adapter PROPERTIES
     PREFIX ""
     OUTPUT_NAME "PythonFar.adapter"
-    LINK_FLAGS "/EXPORT:Initialize=adapter_Initialize /EXPORT:IsPlugin=adapter_IsPlugin /EXPORT:CreateInstance=adapter_CreateInstance /EXPORT:GetFunctionAddress=adapter_GetFunctionAddress /EXPORT:GetError=adapter_GetError /EXPORT:DestroyInstance=adapter_DestroyInstance /EXPORT:Free=adapter_Free"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/$<CONFIG>/PythonFar"
+    LINK_FLAGS "/EXPORT:Initialize=adapter_Initialize /EXPORT:IsPlugin=adapter_IsPlugin /EXPORT:CreateInstance=adapter_CreateInstance /EXPORT:GetFunctionAddress=adapter_GetFunctionAddress /EXPORT:GetError=adapter_GetError /EXPORT:DestroyInstance=adapter_DestroyInstance /EXPORT:Free=adapter_Free /EXPORT:RunScript=adapter_RunScript"
 )
 
 # ===== Tests =====
@@ -126,17 +128,12 @@ add_custom_command(TARGET pythonfar_tests POST_BUILD
 )
 
 # ===== Struct Dumper =====
-# struct_dumper emits compiler-truth struct offsets to JSON. It runs as a
-# POST_BUILD step, so skip running it when cross-compiling (the produced binary
-# targets a different architecture and cannot execute on the build host). The
-# checked-in python/far_struct_offsets.json from a native build is used instead.
+# Dumps compiler-truth struct offsets to JSON next to the built DLL.
+# Skipped when cross-compiling (binary targets a different arch than host).
 add_executable(struct_dumper tools/struct_dumper.cpp)
 if(NOT PYTHONFAR_CROSS_BUILD)
     add_custom_command(TARGET struct_dumper POST_BUILD
-        COMMAND $<TARGET_FILE:struct_dumper> "$<TARGET_FILE_DIR:PythonFar>/far_struct_offsets.json"
-        COMMAND ${CMAKE_COMMAND} -E copy
-        "$<TARGET_FILE_DIR:PythonFar>/far_struct_offsets.json"
-        "${CMAKE_CURRENT_SOURCE_DIR}/python/far_struct_offsets.json"
+        COMMAND $<TARGET_FILE:struct_dumper> "${CMAKE_BINARY_DIR}/$<CONFIG>/far_struct_offsets.json"
     )
 endif()
 
@@ -144,17 +141,16 @@ endif()
 # Copies runtime python scripts (*.py, excluding test fixtures) to
 # <build>/Release/python so that setup_far.ps1 and the CI artifact always
 # have the scripts in a known location relative to the built DLLs.
-file(GLOB PYTHONFAR_PYTHON_SCRIPTS "${CMAKE_CURRENT_SOURCE_DIR}/python/*.py")
-list(FILTER PYTHONFAR_PYTHON_SCRIPTS EXCLUDE REGEX ".*test_.*\\.py$")
-foreach(script IN LISTS PYTHONFAR_PYTHON_SCRIPTS)
-    add_custom_command(TARGET PythonFar.adapter POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${script}"
-            "$<TARGET_FILE_DIR:PythonFar.adapter>/python/"
-        COMMENT "Copying ${script} to build output"
-        VERBATIM
-    )
-endforeach()
+add_custom_command(TARGET PythonFar.adapter POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:PythonFar.adapter>/python"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/far.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/far_api.py"
+        "$<TARGET_FILE_DIR:PythonFar.adapter>/python/"
+    COMMENT "Copying python scripts to build output directory"
+    VERBATIM
+)
 
 # ===== Install =====
 install(TARGETS PythonFar PythonFar.adapter
