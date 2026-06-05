@@ -912,8 +912,73 @@ HANDLE WINAPI OpenW(const OpenInfo* Info) {
             return (HANDLE)1;
         }
         
-         LOG_TRACE("OpenW: Unknown command: " << command);
-        return nullptr;
+        // Default: treat the command as a Python script name and execute it.
+        {
+            std::string scriptName = command;
+            LOG_TRACE("OpenW: Running script: " << scriptName);
+
+            if (scriptName.empty() ||
+                scriptName.find("..") != std::string::npos) {
+                LOG_TRACE("OpenW: Invalid script name: " << scriptName);
+                return nullptr;
+            }
+
+            // Build script path: absolute path or relative to CWD
+            std::wstring wideScriptName = PythonFar::UTF8ToWide(scriptName);
+            std::wstring scriptPath;
+            if (wideScriptName.find(L':') != std::wstring::npos ||
+                wideScriptName[0] == L'\\' || wideScriptName[0] == L'/') {
+                // Absolute path (C:\... or \\...)
+                scriptPath = wideScriptName;
+            } else if (wideScriptName.find(L'\\') != std::wstring::npos ||
+                       wideScriptName.find(L'/') != std::wstring::npos) {
+                // Relative path with subdirectories — resolve against CWD
+                WCHAR cwd[MAX_PATH];
+                GetCurrentDirectoryW(MAX_PATH, cwd);
+                scriptPath = std::wstring(cwd) + L"\\" + wideScriptName;
+            } else {
+                // Bare name — look in CWD
+                WCHAR cwd[MAX_PATH];
+                GetCurrentDirectoryW(MAX_PATH, cwd);
+                scriptPath = std::wstring(cwd) + L"\\" + wideScriptName;
+            }
+            if (scriptPath.find(L".py") == std::wstring::npos) {
+                scriptPath += L".py";
+            }
+
+            LOG_TRACE("OpenW: Script path: " << PythonFar::WideToUTF8(scriptPath.c_str()));
+
+            // Ensure adapter is initialised
+            if (!g_Adapter.IsInitialized()) {
+                LOG_TRACE("OpenW: Adapter not initialized, trying to initialize...");
+                GlobalInfo gi = { sizeof(GlobalInfo) };
+                if (!g_Adapter.ModuleInit() || !g_Adapter.Initialize(&gi)) {
+                    LOG_TRACE("OpenW: Failed to initialize adapter");
+                    return nullptr;
+                }
+                LOG_TRACE("OpenW: Adapter initialized successfully");
+            }
+
+            // Call RunScript directly via GetProcAddress on the adapter DLL
+            // (GetFunctionAddress requires a non-null plugin instance).
+            HMODULE hAdapter = GetModuleHandleW(PythonFar::ADAPTER_DLL_NAME);
+            if (!hAdapter) {
+                LOG_TRACE("OpenW: Adapter DLL not loaded");
+                return nullptr;
+            }
+            typedef BOOL (WINAPI *RunScriptFunc)(const wchar_t*);
+            RunScriptFunc runScript =
+                reinterpret_cast<RunScriptFunc>(GetProcAddress(hAdapter, "RunScript"));
+            if (!runScript) {
+                LOG_TRACE("OpenW: RunScript export not found on adapter");
+                return nullptr;
+            }
+            if (runScript(scriptPath.c_str())) {
+                return (HANDLE)1;
+            }
+            LOG_TRACE("OpenW: Script execution failed");
+            return nullptr;
+        }
     }
     
     LOG_TRACE("OpenW: Not a command line call");
@@ -1015,4 +1080,3 @@ void WINAPI loader_Free(const ExitInfo* Info) noexcept {
 }
 
 } // extern "C"
-

@@ -93,6 +93,17 @@ __declspec(dllexport) BOOL WINAPI adapter_DestroyInstance(HANDLE Instance) noexc
         });
 }
 
+__declspec(dllexport) BOOL WINAPI adapter_RunScript(const wchar_t* Path) noexcept {
+    return try_call(
+        [&] {
+            if (!g_Adapter) return FALSE;
+            return g_Adapter->RunScript(Path) ? TRUE : FALSE;
+        },
+        [] {
+            return FALSE;
+        });
+}
+
 __declspec(dllexport) void WINAPI adapter_Free(const ExitInfo* Info) noexcept {
     return try_call(
         [&] {
