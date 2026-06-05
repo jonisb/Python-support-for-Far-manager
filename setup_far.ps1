@@ -32,7 +32,7 @@ param(
 
     [string]$Dest = "",
 
-    [string]$Build = "build\Release",
+    [string]$Build = "build\Release\PythonFar",
 
     # Skip download+extract if Far.exe already exists in $Dest (cache hit).
     # Pass -Force to always re-download.
@@ -170,7 +170,7 @@ if (-not $Force -and (Test-Path (Join-Path $Dest "Far.exe"))) {
 }
 
 # ---- Deploy adapter (always runs, even on cache hit) ----
-$adaptersDir = Join-Path $Dest "Adapters"
+$adaptersDir = Join-Path $Dest "Adapters\PythonFar"
 New-Item -ItemType Directory -Force -Path $adaptersDir | Out-Null
 
 Write-Host "Copying PythonFar files to $adaptersDir ..."
