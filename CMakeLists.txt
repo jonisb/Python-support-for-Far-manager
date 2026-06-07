@@ -80,7 +80,7 @@ set_target_properties(PythonFar.adapter PROPERTIES
     PREFIX ""
     OUTPUT_NAME "PythonFar.adapter"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/$<CONFIG>/PythonFar"
-    LINK_FLAGS "/EXPORT:Initialize=adapter_Initialize /EXPORT:IsPlugin=adapter_IsPlugin /EXPORT:CreateInstance=adapter_CreateInstance /EXPORT:GetFunctionAddress=adapter_GetFunctionAddress /EXPORT:GetError=adapter_GetError /EXPORT:DestroyInstance=adapter_DestroyInstance /EXPORT:Free=adapter_Free /EXPORT:RunScript=adapter_RunScript"
+    LINK_FLAGS "/EXPORT:Initialize=adapter_Initialize /EXPORT:IsPlugin=adapter_IsPlugin /EXPORT:CreateInstance=adapter_CreateInstance /EXPORT:GetFunctionAddress=adapter_GetFunctionAddress /EXPORT:GetError=adapter_GetError /EXPORT:DestroyInstance=adapter_DestroyInstance /EXPORT:Free=adapter_Free /EXPORT:RunScript=adapter_RunScript /EXPORT:PythonFar_RunScript"
 )
 
 # ===== Tests =====

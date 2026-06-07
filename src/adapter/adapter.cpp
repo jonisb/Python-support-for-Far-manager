@@ -1166,6 +1166,17 @@ void PluginModule::GetPluginInfoW(PluginInfo* Info) {
             MultiByteToWideChar(CP_UTF8, 0, versionStr, -1, &versionBuffer[0], len);
         }
     }
+
+    PyObject* prefixObj = PyDict_GetItemString(result, "command_prefix");
+    if (prefixObj && PyUnicode_Check(prefixObj)) {
+        const char* prefixStr = PyUnicode_AsUTF8(prefixObj);
+        if (prefixStr) {
+            int len = MultiByteToWideChar(CP_UTF8, 0, prefixStr, -1, nullptr, 0);
+            commandPrefixBuffer.resize(len);
+            MultiByteToWideChar(CP_UTF8, 0, prefixStr, -1, &commandPrefixBuffer[0], len);
+            Info->CommandPrefix = commandPrefixBuffer.data();
+        }
+    }
 }
 
 void PluginModule::SetStartupInfoW(const PluginStartupInfo* Info) {

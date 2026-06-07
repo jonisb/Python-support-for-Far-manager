@@ -344,3 +344,10 @@ extern "C" __declspec(dllexport) wchar_t* WINAPI PythonFar_FSFQuoteSpaceOnly(wch
         return Str;
     return g_BridgeStartupInfo.FSF->QuoteSpaceOnly(Str);
 }
+
+extern PythonFarAdapter* g_Adapter;
+
+extern "C" __declspec(dllexport) BOOL WINAPI PythonFar_RunScript(const wchar_t* Path) {
+    if (!g_Adapter) return FALSE;
+    return g_Adapter->RunScript(Path) ? TRUE : FALSE;
+}

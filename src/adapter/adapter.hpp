@@ -182,6 +182,7 @@ private:
     std::vector<wchar_t> descBuffer;
     std::vector<wchar_t> authorBuffer;
     std::vector<wchar_t> versionBuffer;
+    std::vector<wchar_t> commandPrefixBuffer;
 
     // Arrays of string pointers for PluginInfo
     std::vector<const wchar_t*> menuStrings;
