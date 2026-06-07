@@ -103,7 +103,7 @@ jobs:
     - name: Copy logs to workspace
       if: always()
       run: |
-        copy "%TEMP%\pythonfar_*.log" logs\ 2>nul
+        copy "%TEMP%\pythonfar_*.log" logs\
         dir logs\
       shell: cmd
     
