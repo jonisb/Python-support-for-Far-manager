@@ -54,8 +54,8 @@ protected:
         std::wstring exeDir = GetExeDir();
         for (const auto& dir : {
             exeDir,
-            exeDir + L"\\python_runtime",
-            exeDir + L"\\python_runtime\\DLLs"
+            exeDir + L"\\PythonFar\\python_runtime",
+            exeDir + L"\\PythonFar\\python_runtime\\DLLs"
         }) {
             DWORD attrs = GetFileAttributesW(dir.c_str());
             if (attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY)) {
@@ -64,7 +64,7 @@ protected:
             }
         }
 
-        std::wstring adapterPath = exeDir + L"\\PythonFar.adapter.dll";
+        std::wstring adapterPath = exeDir + L"\\PythonFar\\PythonFar.adapter.dll";
         hAdapter = LoadLibraryExW(
             adapterPath.c_str(), nullptr,
             LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |

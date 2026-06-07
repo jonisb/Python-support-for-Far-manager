@@ -466,6 +466,46 @@ std::unique_ptr<PluginModule> PythonFarAdapter::CreatePluginModule(const wchar_t
     }
 }
 
+bool PythonFarAdapter::RunScript(const wchar_t* path) {
+    if (!Py_IsInitialized()) {
+        InitializePython();
+    }
+    if (!Py_IsInitialized()) {
+        LOG_ERROR("RunScript: Python not initialized");
+        return false;
+    }
+
+    std::string narrowPath = PythonFar::WideToUTF8(path);
+    LOG_TRACE("RunScript: " << narrowPath);
+
+    {
+        DWORD attrs = GetFileAttributesW(path);
+        if (attrs == INVALID_FILE_ATTRIBUTES || (attrs & FILE_ATTRIBUTE_DIRECTORY)) {
+            LOG_ERROR("RunScript: File not found: " << narrowPath);
+            return false;
+        }
+    }
+
+    ScopedGIL gil;
+
+    FILE* fp = _wfsopen(path, L"rb", _SH_DENYNO);
+    if (!fp) {
+        LOG_ERROR("RunScript: Cannot open file: " << narrowPath);
+        PyErr_Print();
+        return false;
+    }
+
+    int result = PyRun_SimpleFileExFlags(fp, narrowPath.c_str(), 1, nullptr);
+    if (result != 0) {
+        LOG_ERROR("RunScript: Script execution failed");
+        PyErr_Print();
+        return false;
+    }
+
+    LOG_TRACE("RunScript: Script executed successfully");
+    return true;
+}
+
 // Forward declarations of global wrapper functions
 extern "C" {
     void WINAPI GetGlobalInfoW(GlobalInfo* Info);
@@ -1124,6 +1164,17 @@ void PluginModule::GetPluginInfoW(PluginInfo* Info) {
             int len = MultiByteToWideChar(CP_UTF8, 0, versionStr, -1, nullptr, 0);
             versionBuffer.resize(len);
             MultiByteToWideChar(CP_UTF8, 0, versionStr, -1, &versionBuffer[0], len);
+        }
+    }
+
+    PyObject* prefixObj = PyDict_GetItemString(result, "command_prefix");
+    if (prefixObj && PyUnicode_Check(prefixObj)) {
+        const char* prefixStr = PyUnicode_AsUTF8(prefixObj);
+        if (prefixStr) {
+            int len = MultiByteToWideChar(CP_UTF8, 0, prefixStr, -1, nullptr, 0);
+            commandPrefixBuffer.resize(len);
+            MultiByteToWideChar(CP_UTF8, 0, prefixStr, -1, &commandPrefixBuffer[0], len);
+            Info->CommandPrefix = commandPrefixBuffer.data();
         }
     }
 }

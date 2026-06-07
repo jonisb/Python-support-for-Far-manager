@@ -28,18 +28,12 @@ jobs:
             cmake_platform: Win32
             runner: windows-latest
             run_tests: true
-          # ARM64 cross-build on the x64 runner: always builds, but the
-          # resulting binaries cannot execute here, so tests are skipped.
-          - arch: arm64
-            cmake_platform: ARM64
-            runner: windows-latest
-            run_tests: false
-          # ARM64 native build + tests on GitHub's ARM64 runner (full coverage).
+          # ARM64 native build + tests on GitHub's ARM64 runner.
           - arch: arm64
             cmake_platform: ARM64
             runner: windows-11-arm
             run_tests: true
-    
+
     name: ${{ matrix.arch }} (${{ matrix.runner }})
     
     steps:
@@ -56,10 +50,28 @@ jobs:
         if not exist logs mkdir logs
       shell: cmd
     
+    - name: Cache python_runtime (${{ matrix.arch }})
+      uses: actions/cache@v4
+      with:
+        path: build/Release/PythonFar/python_runtime
+        key: python-runtime-3.11.9-${{ matrix.arch }}
+
+    - name: Cache python SDK (${{ matrix.arch }})
+      uses: actions/cache@v4
+      with:
+        path: build/python_sdk
+        key: python-sdk-3.11.9-${{ matrix.arch }}
+
     - name: Download self-contained Python (${{ matrix.arch }})
       run: .\setup_python.ps1 -Arch ${{ matrix.arch }}
       shell: pwsh
     
+    - name: Cache googletest (${{ matrix.arch }})
+      uses: actions/cache@v4
+      with:
+        path: build/_deps
+        key: gtest-v1.14.0-${{ matrix.cmake_platform }}
+
     - name: Configure CMake
       run: |
         cd build
@@ -77,8 +89,8 @@ jobs:
       run: |
         # Place runtime DLLs next to the test exe so it loads the SAME
         # python311.dll that matches python_runtime\Lib (no system Python).
-        Copy-Item "build\Release\python_runtime\DLLs\*.dll" "build\Release\" -Force
-        Copy-Item "build\Release\python_runtime\DLLs\*.pyd" "build\Release\" -Force -ErrorAction SilentlyContinue
+        Copy-Item "build\Release\PythonFar\python_runtime\DLLs\*.dll" "build\Release\" -Force
+        Copy-Item "build\Release\PythonFar\python_runtime\DLLs\*.pyd" "build\Release\" -Force -ErrorAction SilentlyContinue
       shell: pwsh
     
     - name: Run tests
@@ -91,7 +103,7 @@ jobs:
     - name: Copy logs to workspace
       if: always()
       run: |
-        copy "%TEMP%\pythonfar_*.log" logs\ 2>nul
+        copy "%TEMP%\pythonfar_*.log" logs\
         dir logs\
       shell: cmd
     
@@ -111,20 +123,123 @@ jobs:
       with:
         name: pythonfar-dlls-${{ matrix.arch }}
         path: |
-          build/Release/PythonFar.dll
-          build/Release/PythonFar.adapter.dll
-          python/far_struct_offsets.json
+          build/Release/PythonFar/PythonFar.dll
+          build/Release/PythonFar/PythonFar.adapter.dll
+          build/Release/PythonFar/python/**
         retention-days: 30
-    
-    - name: Create release
-      if: ${{ startsWith(github.ref, 'refs/tags/v') && (matrix.arch != 'arm64' || matrix.run_tests) }}
-      uses: softprops/action-gh-release@v1
+
+  deploy-far:
+    name: Deploy to Far ${{ matrix.far_tag }} (${{ matrix.arch }})
+    needs: build
+    runs-on: ${{ matrix.arch == 'arm64' && 'windows-11-arm' || 'windows-latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        far_tag:
+          - latest
+          - ci/v3.0.6687.4869
+        arch:
+          - x64
+          - x86
+          - arm64
+
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Download built PythonFar artifacts (${{ matrix.arch }})
+      uses: actions/download-artifact@v4
       with:
-        files: |
-          build/Release/PythonFar.dll
-          build/Release/PythonFar.adapter.dll
-          python/far_struct_offsets.json
-        draft: false
-        prerelease: ${{ contains(github.ref, 'rc') || contains(github.ref, 'beta') }}
+        name: pythonfar-dlls-${{ matrix.arch }}
+        path: artifacts
+
+    - name: Restore python_runtime from cache (${{ matrix.arch }})
+      uses: actions/cache@v4
+      with:
+        path: artifacts/python_runtime
+        key: python-runtime-3.11.9-${{ matrix.arch }}
+
+    - name: Resolve Far Manager tag
+      id: far_tag
+      run: |
+        if ('${{ matrix.far_tag }}' -eq 'latest') {
+            $headers = @{
+                'User-Agent'    = 'PythonFar-CI'
+                'Authorization' = "Bearer ${{ secrets.GITHUB_TOKEN }}"
+            }
+            $tag = (Invoke-RestMethod `
+                -Uri 'https://api.github.com/repos/FarGroup/FarManager/releases?per_page=1' `
+                -Headers $headers | Select-Object -First 1).tag_name
+        } else {
+            $tag = '${{ matrix.far_tag }}'
+        }
+        $safe = $tag -replace '[/\\]', '-'
+        Write-Host "Resolved tag: $tag (safe: $safe)"
+        "tag=$tag"       >> $env:GITHUB_OUTPUT
+        "safe=$safe"     >> $env:GITHUB_OUTPUT
+      shell: pwsh
+
+    - name: Cache Far Manager (${{ matrix.arch }})
+      uses: actions/cache@v4
+      with:
+        path: far
+        key: far-${{ steps.far_tag.outputs.safe }}-${{ matrix.arch }}
+
+    - name: Download Far Manager and deploy adapter
+      id: deploy
+      run: |
+        $params = @{
+            Tag   = '${{ steps.far_tag.outputs.tag }}'
+            Arch  = '${{ matrix.arch }}'
+            Build = 'artifacts'
+            Dest  = 'far'
+        }
+        try {
+            .\setup_far.ps1 @params
+            "deployed=true" >> $env:GITHUB_OUTPUT
+        } catch {
+            Write-Host "Skipped: $($_.Exception.Message)"
+            exit 0
+        }
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      shell: pwsh
+
+    - name: Run Far with py:ci_startup
+      if: steps.deploy.outputs.deployed == 'true'
+      run: |
+        $timeout = 30
+        $proc = Start-Process -FilePath "far\Far.exe" -ArgumentList "py:ci_startup" -PassThru -NoNewWindow
+        if (-not $proc.WaitForExit($timeout * 1000)) {
+            Write-Host "Far did not exit within ${timeout}s — killing"
+            $proc.Kill()
+            exit 1
+        }
+        Write-Host "Far exited with code: $($proc.ExitCode)"
+        $log = Join-Path $env:TEMP "pythonfar_ci.log"
+        if (Test-Path $log) {
+            Get-Content $log
+            if ((Get-Content $log -Raw) -match "OK") {
+                Write-Host "CI startup OK"
+            } else {
+                Write-Host "CI startup log does not contain OK"
+                exit 1
+            }
+        } else {
+            Write-Host "CI log not found: $log"
+            exit 1
+        }
+      shell: pwsh
+
+    - name: Collect Far test logs
+      if: always() && steps.deploy.outputs.deployed == 'true'
+      run: |
+        Copy-Item "$env:TEMP\pythonfar_*.log" . -Force -ErrorAction SilentlyContinue
+      shell: pwsh
+
+    - name: Upload Far test log artifacts
+      if: always() && steps.deploy.outputs.deployed == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: far-test-logs-${{ steps.far_tag.outputs.safe }}-${{ matrix.arch }}
+        path: pythonfar_*.log
+        if-no-files-found: ignore

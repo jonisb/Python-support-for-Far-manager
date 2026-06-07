@@ -27,8 +27,9 @@ param(
     [ValidateSet("x64", "x86", "arm64")]
     [string]$Arch = "x64",                 # x64, x86, or arm64
     [string]$Dest = "build\python_sdk",
-    [string]$RuntimeDest = "",             # defaults to build\Release\python_runtime
-    [string]$PythonVersion = "3.11.9"
+    [string]$RuntimeDest = "",             # defaults to build\Release\PythonFar\python_runtime
+    [string]$PythonVersion = "3.11.9",
+    [switch]$Force                         # re-download even if files exist
 )
 
 $ErrorActionPreference = "Stop"
@@ -49,7 +50,7 @@ $verLower = $PythonVersion.ToLowerInvariant()
 $nupkgUrl = "https://api.nuget.org/v3-flatcontainer/$pkgIdLower/$verLower/$pkgIdLower.$verLower.nupkg"
 
 if ([string]::IsNullOrEmpty($RuntimeDest)) {
-    $RuntimeDest = "build\Release\python_runtime"
+    $RuntimeDest = "build\Release\PythonFar\python_runtime"
 }
 
 Write-Host "============================================================"
@@ -60,6 +61,24 @@ Write-Host "  NuGet package: $pkgId"
 Write-Host "  SDK dest:      $Dest"
 Write-Host "  Runtime dest:  $RuntimeDest"
 Write-Host "============================================================"
+
+# ---- Skip download if everything already exists ----
+if (-not $Force) {
+    $allPresent = (
+        "$Dest\include\Python.h",
+        "$Dest\libs\python311.lib",
+        "$RuntimeDest\DLLs\python311.dll",
+        "$RuntimeDest\DLLs\_ctypes.pyd",
+        "$RuntimeDest\Lib\encodings\__init__.py"
+    ) | ForEach-Object { Test-Path $_ } | Where-Object { -not $_ }
+    if (-not $allPresent) {
+        Write-Host "All Python SDK and runtime files present — skipping download."
+        Write-Host "  SDK at:    $Dest"
+        Write-Host "  Runtime at: $RuntimeDest"
+        Write-Host "  Use -Force to re-download."
+        exit 0
+    }
+}
 
 $temp = Join-Path $env:TEMP "pythonfar_nuget"
 if (Test-Path $temp) { Remove-Item $temp -Recurse -Force }

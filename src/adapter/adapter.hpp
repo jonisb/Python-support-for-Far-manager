@@ -82,6 +82,9 @@ public:
     // Create a plugin instance from a .py file
     std::unique_ptr<PluginModule> CreatePluginModule(const wchar_t* filename);
 
+    // Run a plain .py script (not a plugin) via the embedded Python engine
+    bool RunScript(const wchar_t* path);
+
     // Get a function pointer for a plugin instance
     FARPROC GetFunction(HANDLE instance, const wchar_t* functionName);
     void LogExportStatus();
@@ -179,6 +182,7 @@ private:
     std::vector<wchar_t> descBuffer;
     std::vector<wchar_t> authorBuffer;
     std::vector<wchar_t> versionBuffer;
+    std::vector<wchar_t> commandPrefixBuffer;
 
     // Arrays of string pointers for PluginInfo
     std::vector<const wchar_t*> menuStrings;
