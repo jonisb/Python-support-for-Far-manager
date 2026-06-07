@@ -131,7 +131,7 @@ jobs:
   deploy-far:
     name: Deploy to Far ${{ matrix.far_tag }} (${{ matrix.arch }})
     needs: build
-    runs-on: windows-latest
+    runs-on: ${{ matrix.arch == 'arm64' && 'windows-11-arm' || 'windows-latest' }}
     strategy:
       fail-fast: false
       matrix:
