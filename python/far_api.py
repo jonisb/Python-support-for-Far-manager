@@ -41,8 +41,9 @@ FILETIME = wintypes.FILETIME
 COLORREF = wintypes.COLORREF
 size_t = ctypes.c_size_t
 wchar_t = ctypes.c_wchar
-intptr_t = ctypes.c_longlong  # x64
-uintptr_t = ctypes.c_ulonglong  # x64
+_PTR = ctypes.c_uint64 if ctypes.sizeof(ctypes.c_void_p) == 8 else ctypes.c_uint32
+intptr_t = _PTR
+uintptr_t = _PTR
 
 
 # FarColor structures
