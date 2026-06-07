@@ -243,25 +243,3 @@ jobs:
         name: far-test-logs-${{ steps.far_tag.outputs.safe }}-${{ matrix.arch }}
         path: pythonfar_*.log
         if-no-files-found: ignore
-
-    - name: Verify deployment
-      if: steps.deploy.outputs.deployed == 'true'
-      run: |
-        $safeTag = '${{ matrix.far_tag }}' -replace '[/\\]', '-'
-        $dest    = "far\Adapters\PythonFar"
-        if (Test-Path $dest) {
-            Get-ChildItem -Recurse $dest | Select-Object FullName, Length | Format-Table | Out-String |
-                Set-Content "deploy-verify-$safeTag-${{ matrix.arch }}.txt"
-            Get-ChildItem -Recurse $dest
-        } else {
-            Write-Host "Adapters dir not found: $dest"
-        }
-      shell: pwsh
-
-    - name: Upload deployment verification
-      if: steps.deploy.outputs.deployed == 'true'
-      uses: actions/upload-artifact@v4
-      with:
-        name: far-deploy-verify-${{ steps.far_tag.outputs.safe }}-${{ matrix.arch }}
-        path: deploy-verify-*.txt
-        if-no-files-found: ignore
