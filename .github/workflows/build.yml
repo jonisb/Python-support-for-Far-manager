@@ -231,13 +231,13 @@ jobs:
       shell: pwsh
 
     - name: Collect Far test logs
-      if: steps.deploy.outputs.deployed == 'true'
+      if: always() && steps.deploy.outputs.deployed == 'true'
       run: |
         Copy-Item "$env:TEMP\pythonfar_*.log" . -Force -ErrorAction SilentlyContinue
       shell: pwsh
 
     - name: Upload Far test log artifacts
-      if: steps.deploy.outputs.deployed == 'true'
+      if: always() && steps.deploy.outputs.deployed == 'true'
       uses: actions/upload-artifact@v4
       with:
         name: far-test-logs-${{ steps.far_tag.outputs.safe }}-${{ matrix.arch }}
