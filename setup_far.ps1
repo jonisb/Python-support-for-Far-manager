@@ -186,6 +186,15 @@ if (Test-Path $pythonSrc) {
     Write-Host "Copied python scripts to $pythonDest"
 }
 
+# Deploy py_handler.far.py to Plugins\PythonFar\
+$handlerSrc = Join-Path $pythonSrc "py_handler.far.py"
+if (Test-Path $handlerSrc) {
+    $pluginsDir = Join-Path $Dest "Plugins\PythonFar"
+    New-Item -ItemType Directory -Force -Path $pluginsDir | Out-Null
+    Copy-Item $handlerSrc $pluginsDir -Force
+    Write-Host "Copied py_handler to $pluginsDir"
+}
+
 # Copy python_runtime if present in build output
 $runtimeSrc = Join-Path $Build "python_runtime"
 if (Test-Path $runtimeSrc) {
