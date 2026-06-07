@@ -204,6 +204,46 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       shell: pwsh
 
+    - name: Run Far with py:ci_startup
+      if: steps.deploy.outputs.deployed == 'true'
+      run: |
+        $timeout = 30
+        $proc = Start-Process -FilePath "far\Far.exe" -ArgumentList "py:ci_startup" -PassThru -NoNewWindow
+        if (-not $proc.WaitForExit($timeout * 1000)) {
+            Write-Host "Far did not exit within ${timeout}s — killing"
+            $proc.Kill()
+            exit 1
+        }
+        Write-Host "Far exited with code: $($proc.ExitCode)"
+        $log = Join-Path $env:TEMP "pythonfar_ci.log"
+        if (Test-Path $log) {
+            Get-Content $log
+            if ((Get-Content $log -Raw) -match "OK") {
+                Write-Host "CI startup OK"
+            } else {
+                Write-Host "CI startup log does not contain OK"
+                exit 1
+            }
+        } else {
+            Write-Host "CI log not found: $log"
+            exit 1
+        }
+      shell: pwsh
+
+    - name: Collect Far test logs
+      if: steps.deploy.outputs.deployed == 'true'
+      run: |
+        Copy-Item "$env:TEMP\pythonfar_*.log" . -Force -ErrorAction SilentlyContinue
+      shell: pwsh
+
+    - name: Upload Far test log artifacts
+      if: steps.deploy.outputs.deployed == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: far-test-logs-${{ steps.far_tag.outputs.safe }}-${{ matrix.arch }}
+        path: pythonfar_*.log
+        if-no-files-found: ignore
+
     - name: Verify deployment
       if: steps.deploy.outputs.deployed == 'true'
       run: |
