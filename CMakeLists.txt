@@ -147,6 +147,7 @@ add_custom_command(TARGET PythonFar.adapter POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/python/far.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/python/far_api.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/ci_startup.py"
         "$<TARGET_FILE_DIR:PythonFar.adapter>/python/"
     COMMENT "Copying python scripts to build output directory"
     VERBATIM
