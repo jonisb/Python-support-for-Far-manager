@@ -186,8 +186,8 @@ if (Test-Path $pythonSrc) {
     Write-Host "Copied python scripts to $pythonDest"
 }
 
-# Deploy py_handler.far.py to Plugins\PythonFar\
-$handlerSrc = Join-Path $pythonSrc "py_handler.far.py"
+# Deploy py_handler.far.py to Plugins\PythonFar\ (from source, not build output)
+$handlerSrc = Join-Path $PSScriptRoot "python\py_handler.far.py"
 if (Test-Path $handlerSrc) {
     $pluginsDir = Join-Path $Dest "Plugins\PythonFar"
     New-Item -ItemType Directory -Force -Path $pluginsDir | Out-Null
@@ -195,8 +195,15 @@ if (Test-Path $handlerSrc) {
     Write-Host "Copied py_handler to $pluginsDir"
 }
 
-# Copy python_runtime if present in build output
+# Copy python_runtime if present in build output, otherwise generate it
 $runtimeSrc = Join-Path $Build "python_runtime"
+if (-not (Test-Path $runtimeSrc)) {
+    Write-Host "python_runtime not found in $Build — running setup_python.ps1 ..."
+    $setupPy = Join-Path $PSScriptRoot "setup_python.ps1"
+    if (Test-Path $setupPy) {
+        & $setupPy -Arch $Arch -RuntimeDest $runtimeSrc
+    }
+}
 if (Test-Path $runtimeSrc) {
     $runtimeDest = Join-Path $adaptersDir "python_runtime"
     if (Test-Path $runtimeDest) { Remove-Item $runtimeDest -Recurse -Force }
