@@ -21,12 +21,12 @@ jobs:
           # Native x64 build + tests on the standard x64 runner.
           - arch: x64
             cmake_platform: x64
-            runner: windows-latest
+            runner: windows-2022
             run_tests: true
           # x86 (Win32) binaries run fine on the x64 runner, so test natively.
           - arch: x86
             cmake_platform: Win32
-            runner: windows-latest
+            runner: windows-2022
             run_tests: true
           # ARM64 native build + tests on GitHub's ARM64 runner.
           - arch: arm64
@@ -131,7 +131,7 @@ jobs:
   deploy-far:
     name: Deploy to Far ${{ matrix.far_tag }} (${{ matrix.arch }})
     needs: build
-    runs-on: ${{ matrix.arch == 'arm64' && 'windows-11-arm' || 'windows-latest' }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'windows-11-arm' || 'windows-2022' }}
     strategy:
       fail-fast: false
       matrix:
