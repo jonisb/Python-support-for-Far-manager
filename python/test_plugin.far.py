@@ -43,7 +43,7 @@ class Plugin:
         # Don't modify C structures, just log
         return True
 
-    def OpenW(self, info_ptr):
+    def OpenW(self, info):
         """Called when plugin is opened from menu"""
         log.info("Simple plugin OpenW called")
         # Just log for now
