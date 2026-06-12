@@ -52,8 +52,7 @@ class Plugin:
             pass
         return None
 
-    def OpenW(self, info_ptr):
-        info = ctypes.cast(info_ptr, ctypes.POINTER(far_api.OpenInfo)).contents
+    def OpenW(self, info):
         if info.OpenFrom != far_api.OPEN_COMMANDLINE:
             return None
         if not info.Data:
