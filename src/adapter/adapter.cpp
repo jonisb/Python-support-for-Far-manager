@@ -1188,28 +1188,66 @@ void PluginModule::SetStartupInfoW(const PluginStartupInfo* Info) {
 
 HANDLE PluginModule::OpenW(const OpenInfo* Info) {
     LOG_TRACE("PluginModule::OpenW called");
-    
-    // Try to call the Python plugin's OpenW or open method
-    // We pass the Info pointer as an integer argument
-    PyObj result = CallMethod("OpenW", "(n)", (Py_ssize_t)Info);
-    if (!result) {
-        // Try lowercase 'open' as fallback
-        result = CallMethod("open", "(n)", (Py_ssize_t)Info);
+    if (!Info) return INVALID_HANDLE_VALUE;
+
+    ScopedGIL gil;
+
+    // Convert OpenInfo* to a Python ctypes OpenInfo object via
+    // far_api.make_open_info(ptr), so the plugin's OpenW receives
+    // the ready-to-use structure directly.
+    PyObj far_api_mod(PyImport_ImportModule("far_api"));
+    if (!far_api_mod) {
+        LOG_TRACE("PluginModule::OpenW - failed to import far_api");
+        PyErr_Clear();
+        return INVALID_HANDLE_VALUE;
     }
-    
-    if (result) {
-        LOG_TRACE("PluginModule::OpenW - Python method returned successfully");
-        
-        // If the result is an integer, return it as the HANDLE
-        if (PyLong_Check(result)) {
-            HANDLE hResult = (HANDLE)PyLong_AsVoidPtr(result);
-            return hResult;
+
+    PyObj make_info(PyObject_GetAttrString(far_api_mod, "make_open_info"));
+    if (!make_info || !PyCallable_Check(make_info)) {
+        LOG_TRACE("PluginModule::OpenW - far_api has no make_open_info");
+        PyErr_Clear();
+        return INVALID_HANDLE_VALUE;
+    }
+
+    PyObj info_ptr(PyLong_FromVoidPtr(const_cast<OpenInfo*>(Info)));
+    PyObj info_obj(PyObject_CallFunctionObjArgs(make_info, info_ptr.get(), nullptr));
+    if (!info_obj) {
+        LOG_TRACE("PluginModule::OpenW - make_open_info failed");
+        PyErr_Clear();
+        return INVALID_HANDLE_VALUE;
+    }
+
+    // Try OpenW first, fall back to 'open'
+    PyObj method(PyObject_GetAttrString(m_PluginInstance, "OpenW"));
+    if (method && PyCallable_Check(method)) {
+        PyObj result(PyObject_CallFunctionObjArgs(method, info_obj.get(), nullptr));
+        if (result) {
+            LOG_TRACE("PluginModule::OpenW - Python OpenW succeeded");
+            if (PyLong_Check(result)) {
+                return (HANDLE)PyLong_AsVoidPtr(result);
+            }
+            return INVALID_HANDLE_VALUE;
         }
-        
+        PyErr_Clear();
     } else {
-        LOG_TRACE("PluginModule::OpenW - Python method not found or failed");
+        PyErr_Clear();
     }
-    
+
+    method.reset(PyObject_GetAttrString(m_PluginInstance, "open"));
+    if (method && PyCallable_Check(method)) {
+        PyObj result(PyObject_CallFunctionObjArgs(method, info_obj.get(), nullptr));
+        if (result) {
+            LOG_TRACE("PluginModule::OpenW - Python 'open' succeeded");
+            if (PyLong_Check(result)) {
+                return (HANDLE)PyLong_AsVoidPtr(result);
+            }
+        }
+        PyErr_Clear();
+    } else {
+        PyErr_Clear();
+    }
+
+    LOG_TRACE("PluginModule::OpenW - Python method not found or failed");
     return INVALID_HANDLE_VALUE;
 }
 
