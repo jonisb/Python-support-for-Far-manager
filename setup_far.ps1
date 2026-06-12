@@ -129,10 +129,12 @@ Write-Host "  Tag:   $Tag"
 Write-Host "  Dest:  $Dest"
 
 # ---- Find the correct .7z asset ----
-# Pattern: Far.<arch>.<version>.<hash>.7z
+# Supports two naming conventions:
+#   Old: Far.<arch>.<version>.<hash>.7z        (e.g. Far.ARM64.6690.4875.a1b2c3.7z)
+#   New: Far_<version>_<arch>_<date>_<hash>.7z (e.g. Far_3.0.6698.4891_ARM64_20260612_c452008.7z)
 # Exclude .pdb.7z and .msi
 $asset = $release.assets | Where-Object {
-    $_.name -like "Far.$archInFilename.*.7z" -and
+    $_.name -match "^Far[._](?:[^._]*[._])*$archInFilename[._].*\.7z$" -and
     $_.name -notlike "*.pdb.7z"
 } | Select-Object -First 1
 
