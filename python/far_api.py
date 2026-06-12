@@ -2206,6 +2206,14 @@ class OpenInfo(ctypes.Structure):
     ]
 
 
+def make_open_info(ptr):
+    """Convert a pointer (or integer address) to an OpenInfo structure.
+
+    Called from C++ in PluginModule::OpenW so plugins receive 'info' directly.
+    """
+    return ctypes.cast(ptr, ctypes.POINTER(OpenInfo)).contents
+
+
 # ClosePanelInfo – passed to ClosePanelW (plugin.hpp)
 class ClosePanelInfo(ctypes.Structure):
     _fields_ = [
