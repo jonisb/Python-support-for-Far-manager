@@ -6,7 +6,7 @@
 /*
 plugin.hpp
 
-Plugin API for Far Manager <%VERSION%>
+Plugin API for Far Manager 3.0.6698.0
 */
 /*
 Copyright © 1996 Eugene Roshal
@@ -40,23 +40,17 @@ Far Manager plugins that use this header file can be distributed under any
 other possible license with no implications from the above license on them.
 */
 
-#ifndef FAR_USE_INTERNALS
-// #define FAR_USE_INTERNALS  // Commented out to include Windows headers
-#endif // END FAR_USE_INTERNALS
 
 #define FARMANAGERVERSION_MAJOR 3
 #define FARMANAGERVERSION_MINOR 0
 #define FARMANAGERVERSION_REVISION 0
-#define FARMANAGERVERSION_BUILD 1905
+#define FARMANAGERVERSION_BUILD 6698
 #define FARMANAGERVERSION_STAGE VS_RELEASE
 
 #ifndef RC_INVOKED
 
-#ifdef FAR_USE_INTERNALS
-#else // ELSE FAR_USE_INTERNALS
 #include <stdint.h>
 #include <windows.h>
-#endif // END FAR_USE_INTERNALS
 
 #undef DefDlgProc
 
@@ -68,37 +62,13 @@ other possible license with no implications from the above license on them.
 
 typedef GUID UUID;
 
-typedef unsigned long long OPERATION_MODES;
 
-enum LINK_TYPE { LINK_HARDLINK = 1, LINK_JUNCTION = 2, LINK_VOLMOUNT = 3, LINK_SYMLINKFILE = 4, LINK_SYMLINKDIR = 5, LINK_SYMLINK = 6 };
-typedef unsigned long long MKLINK_FLAGS;
-
-// Missing typedefs for function pointers
-typedef size_t (WINAPI *FARSTDGETPATHROOT)(const wchar_t *Path, wchar_t *Root, size_t DestSize);
-typedef BOOL (WINAPI *FARSTDMKLINK)(const wchar_t *Src, const wchar_t *Dest, LINK_TYPE Type, MKLINK_FLAGS Flags);
-
-#ifdef FAR_USE_INTERNALS
-struct FAR_INPUT_RECORD
-{
-	DWORD IntKey;
-	INPUT_RECORD Rec;
-};
-#endif // END FAR_USE_INTERNALS
-
-#ifdef FAR_USE_INTERNALS
-#define CP_UTF16LE    static_cast<uintptr_t>(1200)
-#define CP_UTF16BE    static_cast<uintptr_t>(1201)
-#define CP_DEFAULT    static_cast<uintptr_t>(-1)
-#define CP_REDETECT   static_cast<uintptr_t>(-2)
-#define CP_ALL        static_cast<uintptr_t>(-3)
-#else // ELSE FAR_USE_INTERNALS
 #define CP_UTF16LE    ((uintptr_t)1200)
 #define CP_UTF16BE    ((uintptr_t)1201)
 #define CP_UNICODE    CP_UTF16LE
 #define CP_REVERSEBOM CP_UTF16BE
 #define CP_DEFAULT    ((uintptr_t)-1)
 #define CP_REDETECT   ((uintptr_t)-2)
-#endif // END FAR_USE_INTERNALS
 
 enum UNDERLINE_STYLE
 {
@@ -117,20 +87,14 @@ FAR_INLINE_CONSTANT FARCOLORFLAGS
 	FCF_FG_UNDERLINE_INDEX = 0x0000000000000008ULL,
 	FCF_INDEXMASK          = 0x000000000000000BULL, // FCF_FG_INDEX | FCF_BG_INDEX | FCF_FG_UNDERLINE_INDEX
 
-#ifdef FAR_USE_INTERNALS
-#else // ELSE FAR_USE_INTERNALS
 	// Legacy names, don't use
 	FCF_FG_4BIT            = 0x0000000000000001ULL, // FCF_FG_INDEX
 	FCF_BG_4BIT            = 0x0000000000000002ULL, // FCF_BG_INDEX
 	FCF_4BITMASK           = 0x000000000000000BULL, // FCF_INDEXMASK
-#endif // END FAR_USE_INTERNALS
 
 	FCF_INHERIT_STYLE      = 0x0000000000000004ULL,
 
 	FCF_RAWATTR_MASK       = 0x000000000000FF00ULL, // stored console attributes
-#ifdef FAR_USE_INTERNALS
-	FCF_FOREIGN            = 0x0000000000010000ULL,
-#endif // END FAR_USE_INTERNALS
 
 	FCF_FG_BOLD            = 0x1000000000000000ULL,
 	FCF_FG_ITALIC          = 0x2000000000000000ULL,
@@ -351,8 +315,6 @@ struct FarColor
 		return *this;
 	}
 
-#ifdef FAR_USE_INTERNALS
-#else // ELSE FAR_USE_INTERNALS
 
 	// Legacy names, don't use
 	bool IsBg4Bit() const
@@ -374,16 +336,10 @@ struct FarColor
 	{
 		return SetFgIndex(Value);
 	}
-#endif // END FAR_USE_INTERNALS
 #endif
 };
 
-#ifdef FAR_USE_INTERNALS
-static_assert(sizeof(FarColor) == 24);
-#endif // END FAR_USE_INTERNALS
 
-#ifdef FAR_USE_INTERNALS
-#else // ELSE FAR_USE_INTERNALS
 #define INDEXVALUE(x) ((x)&INDEXMASK)
 #define COLORVALUE(x) ((x)&COLORMASK)
 #define ALPHAVALUE(x) ((x)&ALPHAMASK)
@@ -392,7 +348,6 @@ static_assert(sizeof(FarColor) == 24);
 #define IS_TRANSPARENT(x) (!ALPHAVALUE(x))
 #define MAKE_OPAQUE(x) (x|=ALPHAMASK)
 #define MAKE_TRANSPARENT(x) (x&=COLORMASK)
-#endif // END FAR_USE_INTERNALS
 
 typedef unsigned long long COLORDIALOGFLAGS;
 FAR_INLINE_CONSTANT COLORDIALOGFLAGS
@@ -443,9 +398,6 @@ enum FARDIALOGITEMTYPES
 	DI_RADIOBUTTON                  =  9,
 	DI_COMBOBOX                     = 10,
 	DI_LISTBOX                      = 11,
-#ifdef FAR_USE_INTERNALS
-	DI_MEMOEDIT,
-#endif // END FAR_USE_INTERNALS
 
 	DI_USERCONTROL                  =255,
 };
@@ -461,9 +413,6 @@ static __inline BOOL IsEdit(enum FARDIALOGITEMTYPES Type)
 		case DI_EDIT:
 		case DI_FIXEDIT:
 		case DI_PSWEDIT:
-#ifdef FAR_USE_INTERNALS
-		case DI_MEMOEDIT:
-#endif // END FAR_USE_INTERNALS
 		case DI_COMBOBOX:
 			return TRUE;
 		default:
@@ -505,9 +454,6 @@ FAR_INLINE_CONSTANT FARDIALOGITEMFLAGS
 	DIF_LISTAUTOHIGHLIGHT     = 0x0000000002000000ULL,
 	DIF_LISTNOCLOSE           = 0x0000000004000000ULL,
 	DIF_EDITPATHEXEC          = 0x0000000004000000ULL,
-#ifdef FAR_USE_INTERNALS
-	DIF_AUTOMATION            = 0x0000000008000000ULL,
-#endif // END FAR_USE_INTERNALS
 	DIF_HIDDEN                = 0x0000000010000000ULL,
 	DIF_READONLY              = 0x0000000020000000ULL,
 	DIF_NOFOCUS               = 0x0000000040000000ULL,
@@ -516,9 +462,6 @@ FAR_INLINE_CONSTANT FARDIALOGITEMFLAGS
 	DIF_FOCUS                 = 0x0000000200000000ULL,
 	DIF_RIGHTTEXT             = 0x0000000400000000ULL,
 	DIF_WORDWRAP              = 0x0000000800000000ULL,
-#ifdef FAR_USE_INTERNALS
-	DIF_LISTNOMERGEBORDER     = 0x0000001000000000ULL,
-#endif // END FAR_USE_INTERNALS
 	DIF_HOMEITEM              = 0x0000002000000000ULL,
 	DIF_NONE                  = 0;
 
@@ -636,10 +579,6 @@ enum FARMESSAGE
 
 	DM_USER                         = 0x4000,
 
-#ifdef FAR_USE_INTERNALS
-	DM_KILLSAVESCREEN               = DN_FIRST-1,
-	DM_ALLKEYMODE                   = DN_FIRST-2,
-#endif // END FAR_USE_INTERNALS
 };
 
 enum FARCHECKEDSTATE
@@ -664,9 +603,6 @@ FAR_INLINE_CONSTANT LISTITEMFLAGS
 	LIF_DISABLE            = 0x0000000000080000ULL,
 	LIF_GRAYED             = 0x0000000000100000ULL,
 	LIF_HIDDEN             = 0x0000000000200000ULL,
-#ifdef FAR_USE_INTERNALS
-	LIF_FILTERED           = 0x0000000000800000ULL,
-#endif // END FAR_USE_INTERNALS
 	LIF_DELETEUSERDATA     = 0x0000000080000000ULL,
 	LIF_NONE               = 0;
 
@@ -804,9 +740,6 @@ struct FAR_CHAR_INFO
 	}
 #endif
 };
-#ifdef FAR_USE_INTERNALS
-static_assert(sizeof(FAR_CHAR_INFO) == 32);
-#endif // END FAR_USE_INTERNALS
 
 struct FarDialogItem
 {
@@ -939,9 +872,6 @@ FAR_INLINE_CONSTANT MENUITEMFLAGS
 	MIF_DISABLE    = 0x0000000000080000ULL,
 	MIF_GRAYED     = 0x0000000000100000ULL,
 	MIF_HIDDEN     = 0x0000000000200000ULL,
-#ifdef FAR_USE_INTERNALS
-	MIF_SUBMENU    = 0x0000000000400000ULL,
-#endif // END FAR_USE_INTERNALS
 	MIF_NONE       = 0;
 
 struct FarMenuItem
@@ -989,9 +919,6 @@ FAR_INLINE_CONSTANT PLUGINPANELITEMFLAGS
 	PPIF_SELECTED               = 0x0000000040000000ULL,
 	PPIF_PROCESSDESCR           = 0x0000000080000000ULL,
 
-#ifdef FAR_USE_INTERNALS
-	PPIF_RESERVED               = 0x8000000000000000ULL,
-#endif // END FAR_USE_INTERNALS
 	PPIF_NONE                   = 0;
 
 struct FarPanelItemFreeInfo
@@ -1154,17 +1081,10 @@ struct FarPanelDirectory
 	const wchar_t* File;
 };
 
-#ifdef FAR_USE_INTERNALS
-#define PANEL_NONE    std::bit_cast<HANDLE>(static_cast<intptr_t>(-1))
-#define PANEL_ACTIVE  std::bit_cast<HANDLE>(static_cast<intptr_t>(-1))
-#define PANEL_PASSIVE std::bit_cast<HANDLE>(static_cast<intptr_t>(-2))
-#define PANEL_STOP    std::bit_cast<HANDLE>(static_cast<intptr_t>(-1))
-#else // ELSE FAR_USE_INTERNALS
 #define PANEL_NONE    ((HANDLE)(-1))
 #define PANEL_ACTIVE  ((HANDLE)(-1))
 #define PANEL_PASSIVE ((HANDLE)(-2))
 #define PANEL_STOP    ((HANDLE)(-1))
-#endif // END FAR_USE_INTERNALS
 
 enum FILE_CONTROL_COMMANDS
 {
@@ -1273,9 +1193,6 @@ FAR_INLINE_CONSTANT EDITOR_FLAGS
 	EF_OPENMODE_USEEXISTING  = 0x0000000020000000ULL,
 	EF_OPENMODE_BREAKIFOPEN  = 0x0000000030000000ULL,
 	EF_OPENMODE_RELOADIFOPEN = 0x0000000040000000ULL,
-#ifdef FAR_USE_INTERNALS
-	EF_SERVICEREGION         = 0x0000000000001000ULL,
-#endif // END FAR_USE_INTERNALS
 	EF_NONE                  = 0;
 
 enum EDITOR_EXITCODE
@@ -1284,12 +1201,6 @@ enum EDITOR_EXITCODE
 	EEC_MODIFIED            = 1,
 	EEC_NOT_MODIFIED        = 2,
 	EEC_LOADING_INTERRUPTED = 3,
-#ifdef FAR_USE_INTERNALS
-	EEC_OPENED_EXISTING     = 4,
-	EEC_ALREADY_EXISTS      = 5,
-	EEC_OPEN_NEWINSTANCE    = 6,
-	EEC_RELOAD              = 7,
-#endif // END FAR_USE_INTERNALS
 };
 
 typedef intptr_t (WINAPI *FARAPIEDITOR)(
@@ -1323,7 +1234,7 @@ FAR_INLINE_CONSTANT FARHELPFLAGS
 
 typedef BOOL (WINAPI *FARAPISHOWHELP)(
 	const wchar_t *ModuleName,
-	const wchar_t *HelpTopic,
+	const wchar_t *Topic,
 	FARHELPFLAGS Flags
 );
 
@@ -1402,10 +1313,6 @@ enum FARMACROAREA
 	MACROAREA_DIALOGAUTOCOMPLETION       =  16,   // Autocompletion list in dialogs
 	MACROAREA_GRABBER                    =  17,   // Mode of copying text from the screen
 	MACROAREA_DESKTOP                    =  18,   // Desktop
-#ifdef FAR_USE_INTERNALS
-	MACROAREA_LAST,
-	MACROAREA_INVALID                    =  -1,
-#endif // END FAR_USE_INTERNALS
 
 	MACROAREA_COMMON                     = 255,
 };
@@ -1448,19 +1355,6 @@ FAR_INLINE_CONSTANT FARADDKEYMACROFLAGS
 
 typedef intptr_t (WINAPI *FARMACROCALLBACK)(void* Id,FARADDKEYMACROFLAGS Flags);
 
-#ifdef FAR_USE_INTERNALS
-struct MacroAddMacroV1
-{
-	size_t StructSize;
-	void* Id;
-	const wchar_t *SequenceText;
-	const wchar_t *Description;
-	FARKEYMACROFLAGS Flags;
-	INPUT_RECORD AKey;
-	enum FARMACROAREA Area;
-	FARMACROCALLBACK Callback;
-};
-#endif // END FAR_USE_INTERNALS
 
 struct MacroAddMacro
 {
@@ -1498,6 +1392,7 @@ enum FARMACROVARTYPE
 	FMVT_STACKGETTOP            = 18,
 	FMVT_STACKSETTOP            = 19,
 	FMVT_STACKPUSHVALUE         = 20,
+	FMVT_NEXT                   = 21,
 };
 
 struct FarMacroValue
@@ -1552,9 +1447,6 @@ struct FarMacroValue
 		Array.Values = arr;
 		Array.Count = count;
 	}
-#ifdef FAR_USE_INTERNALS
-	explicit(false) FarMacroValue(const string& v)    { Type=FMVT_STRING; String=v.c_str(); }
-#endif // END FAR_USE_INTERNALS
 #endif
 };
 
@@ -1619,9 +1511,6 @@ enum WINDOWINFO_TYPE
 	WTYPE_COMBOBOX                  = 7,
 	WTYPE_GRABBER                   = 8,
 	WTYPE_HMENU                     = 9,
-#ifdef FAR_USE_INTERNALS
-	WTYPE_FINDFOLDER,
-#endif // END FAR_USE_INTERNALS
 };
 
 typedef unsigned long long WINDOWINFO_FLAGS;
@@ -1808,11 +1697,7 @@ enum SYNCHRO_EVENTS
 	SE_FOLDERCHANGED  =1,
 };
 
-#ifdef FAR_USE_INTERNALS
-#define EEREDRAW_ALL    nullptr
-#else // ELSE FAR_USE_INTERNALS
 #define EEREDRAW_ALL    (void*)0
-#endif // END FAR_USE_INTERNALS
 
 #define CURRENT_EDITOR -1
 
@@ -1852,9 +1737,6 @@ enum EDITOR_CONTROL_COMMANDS
 	ECTL_UNDOREDO                   = 32,
 	ECTL_GETFILENAME                = 33,
 	ECTL_DELCOLOR                   = 34,
-#ifdef FAR_USE_INTERNALS
-	ECTL_SERVICEREGION              = 35,
-#endif // END FAR_USE_INTERNALS
 	ECTL_SUBSCRIBECHANGEEVENT       = 36,
 	ECTL_UNSUBSCRIBECHANGEEVENT     = 37,
 	ECTL_GETTITLE                   = 38,
@@ -1877,14 +1759,6 @@ enum EDITOR_SETPARAMETER_TYPES
 	ESPT_SHOWLINENUMBERS            = 12,
 };
 
-#ifdef FAR_USE_INTERNALS
-struct EditorServiceRegion
-{
-	size_t StructSize;
-	intptr_t Command;
-	unsigned long long Flags;
-};
-#endif // END FAR_USE_INTERNALS
 
 
 struct EditorSetParameter
@@ -1984,7 +1858,6 @@ enum EDITOR_CURRENTSTATE
 	ECSTATE_LOCKED         = 0x00000004,
 };
 
-
 struct EditorInfo
 {
 	size_t StructSize;
@@ -2006,6 +1879,8 @@ struct EditorInfo
 	size_t SessionBookmarkCount;
 	uintptr_t CurState;
 	uintptr_t CodePage;
+	RECT WindowArea;
+	RECT ClientArea;
 };
 
 struct EditorBookmarks
@@ -2052,11 +1927,6 @@ struct EditorConvertPos
 
 typedef unsigned long long EDITORCOLORFLAGS;
 FAR_INLINE_CONSTANT EDITORCOLORFLAGS
-#ifdef FAR_USE_INTERNALS
-	// Achtung! Internally stored as unsigned int to reduce memory usage.
-	// If you want to add any flags above 0x0000000080000000,
-	// don't forget to change ColorItem::Flags to 64-bit too.
-#endif // END FAR_USE_INTERNALS
 	ECF_TABMARKFIRST   = 0x0000000000000001ULL,
 	ECF_TABMARKCURRENT = 0x0000000000000002ULL,
 	ECF_AUTODELETE     = 0x0000000000000004ULL,
@@ -2084,9 +1954,6 @@ struct EditorDeleteColor
 };
 
 #define EDITOR_COLOR_NORMAL_PRIORITY 0x80000000U
-#ifdef FAR_USE_INTERNALS
-#define EDITOR_COLOR_SELECTION_PRIORITY 0xFFFFFFFFU
-#endif // END FAR_USE_INTERNALS
 
 struct EditorSaveFile
 {
@@ -2126,9 +1993,6 @@ FAR_INLINE_CONSTANT INPUTBOXFLAGS
 	FIB_NOAMPERSAND      = 0x0000000000000020ULL,
 	FIB_EDITPATH         = 0x0000000000000040ULL,
 	FIB_EDITPATHEXEC     = 0x0000000000000080ULL,
-#ifdef FAR_USE_INTERNALS
-	FIB_CHECKBOX         = 0x0000000000010000ULL,
-#endif // END FAR_USE_INTERNALS
 	FIB_NONE             = 0;
 
 typedef intptr_t (WINAPI *FARAPIINPUTBOX)(
@@ -2228,7 +2092,7 @@ struct RegExpStatus
 {
 	size_t StructSize;
 	const wchar_t* Error; // Error description
-	int           Position; // position in regex pattern
+	intptr_t    Position; // position in regex pattern
 	int           Status; // 0 - ok
 };
 
@@ -2255,9 +2119,6 @@ enum FARSETTINGSTYPES
 
 enum FARSETTINGS_SUBFOLDERS
 {
-#ifdef FAR_USE_INTERNALS
-	FSSF_PRIVATE                    =  0,
-#endif // END FAR_USE_INTERNALS
 	FSSF_ROOT                       =  0,
 	FSSF_HISTORY_CMD                =  1,
 	FSSF_HISTORY_FOLDER             =  2,
@@ -2282,9 +2143,6 @@ enum FARSETTINGS_SUBFOLDERS
 	FSSF_DIALOG                     = 21,
 	FSSF_INTERFACE                  = 22,
 	FSSF_PANELLAYOUT                = 23,
-#ifdef FAR_USE_INTERNALS
-	FSSF_COUNT
-#endif // END FAR_USE_INTERNALS
 };
 
 enum FAR_PLUGIN_SETTINGS_LOCATION
@@ -2501,7 +2359,7 @@ typedef wchar_t*(WINAPI *FARSTDXLAT)(wchar_t *Line,intptr_t StartPos,intptr_t En
 
 typedef BOOL (WINAPI *FARSTDKEYNAMETOINPUTRECORD)(const wchar_t *Name,INPUT_RECORD* Key);
 
-typedef int (FRSUSERFUNC)(
+typedef int (WINAPI *FRSUSERFUNC)(
 	const struct PluginPanelItem *FData,
 	const wchar_t *FullName,
 	void *Param
@@ -2516,6 +2374,26 @@ FAR_INLINE_CONSTANT FRSMODE
 
 typedef void (WINAPI *FARSTDRECURSIVESEARCH)(const wchar_t *InitDir,const wchar_t *Mask,FRSUSERFUNC Func,FRSMODE Flags,void *Param);
 typedef size_t (WINAPI *FARSTDMKTEMP)(wchar_t *Dest, size_t DestSize, const wchar_t *Prefix);
+typedef size_t (WINAPI *FARSTDGETPATHROOT)(const wchar_t *Path,wchar_t *Root, size_t DestSize);
+
+enum LINK_TYPE
+{
+	LINK_HARDLINK         = 1,
+	LINK_JUNCTION         = 2,
+	LINK_VOLMOUNT         = 3,
+	LINK_SYMLINKFILE      = 4,
+	LINK_SYMLINKDIR       = 5,
+	LINK_SYMLINK          = 6,
+};
+
+typedef unsigned long long MKLINK_FLAGS;
+FAR_INLINE_CONSTANT MKLINK_FLAGS
+	MLF_SHOWERRMSG       = 0x0000000000010000ULL,
+	MLF_DONOTUPDATEPANEL = 0x0000000000020000ULL,
+	MLF_HOLDTARGET       = 0x0000000000040000ULL,
+	MLF_NONE             = 0;
+
+typedef BOOL (WINAPI *FARSTDMKLINK)(const wchar_t *Src,const wchar_t *Dest,enum LINK_TYPE Type, MKLINK_FLAGS Flags);
 typedef size_t (WINAPI *FARGETREPARSEPOINTINFO)(const wchar_t *Src, wchar_t *Dest, size_t DestSize);
 
 enum CONVERTPATHMODES
@@ -2842,6 +2720,38 @@ FAR_INLINE_CONSTANT OPENPANELINFO_FLAGS
 	//
 	OPIF_NONE                    = 0;
 
+struct KeyBarLabel
+{
+	struct FarKey Key;
+	const wchar_t *Text;
+	const wchar_t *LongText;
+};
+
+struct KeyBarTitles
+{
+	size_t CountLabels;
+	struct KeyBarLabel *Labels;
+};
+
+struct FarSetKeyBarTitles
+{
+	size_t StructSize;
+	struct KeyBarTitles *Titles;
+};
+
+typedef unsigned long long OPERATION_MODES;
+FAR_INLINE_CONSTANT OPERATION_MODES
+	OPM_SILENT     =0x0000000000000001ULL,
+	OPM_FIND       =0x0000000000000002ULL,
+	OPM_VIEW       =0x0000000000000004ULL,
+	OPM_EDIT       =0x0000000000000008ULL,
+	OPM_TOPLEVEL   =0x0000000000000010ULL,
+	OPM_DESCR      =0x0000000000000020ULL,
+	OPM_QUICKVIEW  =0x0000000000000040ULL,
+	OPM_PGDN       =0x0000000000000080ULL,
+	OPM_COMMANDS   =0x0000000000000100ULL,
+	OPM_NONE       =0;
+
 struct OpenPanelInfo
 {
 	size_t                       StructSize;
@@ -3068,17 +2978,6 @@ struct GetFindDataInfo
 	void* Instance;
 };
 
-#ifdef FAR_USE_INTERNALS
-struct GetVirtualFindDataInfo
-{
-	size_t StructSize;
-	HANDLE hPanel;
-	struct PluginPanelItem *PanelItem;
-	size_t ItemsNumber;
-	const wchar_t *Path;
-	void* Instance;
-};
-#endif // END FAR_USE_INTERNALS
 
 struct FreeFindDataInfo
 {
@@ -3233,11 +3132,8 @@ struct ErrorInfo
 	const wchar_t* Description;
 };
 
-#ifdef FAR_USE_INTERNALS
-#else // ELSE FAR_USE_INTERNALS
 FAR_INLINE_CONSTANT UUID FarGuid =
 {0x00000000, 0x0000, 0x0000, {0x00,0x00, 0x00,0x00,0x00,0x00,0x00,0x00}};
-#endif // END FAR_USE_INTERNALS
 
 #ifdef __cplusplus
 extern "C"
@@ -3253,17 +3149,11 @@ extern "C"
 	intptr_t WINAPI DeleteFilesW(const struct DeleteFilesInfo *Info);
 	void     WINAPI ExitFARW(const struct ExitInfo *Info);
 	void     WINAPI FreeFindDataW(const struct FreeFindDataInfo *Info);
-#ifdef FAR_USE_INTERNALS
-	void     WINAPI FreeVirtualFindDataW(const struct FreeFindDataInfo *Info);
-#endif // END FAR_USE_INTERNALS
 	intptr_t WINAPI GetFilesW(struct GetFilesInfo *Info);
 	intptr_t WINAPI GetFindDataW(struct GetFindDataInfo *Info);
 	void     WINAPI GetGlobalInfoW(struct GlobalInfo *Info);
 	void     WINAPI GetOpenPanelInfoW(struct OpenPanelInfo *Info);
 	void     WINAPI GetPluginInfoW(struct PluginInfo *Info);
-#ifdef FAR_USE_INTERNALS
-	intptr_t WINAPI GetVirtualFindDataW(struct GetVirtualFindDataInfo *Info);
-#endif // END FAR_USE_INTERNALS
 	intptr_t WINAPI MakeDirectoryW(struct MakeDirectoryInfo *Info);
 	HANDLE   WINAPI OpenW(const struct OpenInfo *Info);
 	intptr_t WINAPI ProcessDialogEventW(const struct ProcessDialogEventInfo *Info);
