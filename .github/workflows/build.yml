@@ -72,6 +72,66 @@ jobs:
         path: build/_deps
         key: gtest-v1.14.0-${{ matrix.cmake_platform }}
 
+    - name: Resolve latest Far tag
+      id: far_tag
+      run: |
+        $headers = @{
+            'User-Agent'    = 'PythonFar-CI'
+            'Authorization' = "Bearer ${{ secrets.GITHUB_TOKEN }}"
+        }
+        $tag = (Invoke-RestMethod -Uri 'https://api.github.com/repos/FarGroup/FarManager/releases?per_page=1' -Headers $headers | Select-Object -First 1).tag_name
+        $safe = $tag -replace '[/\\]', '-'
+        Write-Host "Latest Far tag: $tag (safe: $safe)"
+        "tag=$tag" >> $env:GITHUB_OUTPUT
+        "safe=$safe" >> $env:GITHUB_OUTPUT
+      shell: pwsh
+
+    - name: Cache Far extract (plugin.hpp)
+      uses: actions/cache@v4
+      with:
+        path: build/far_hpp
+        key: far-plugin-hpp-${{ steps.far_tag.outputs.safe }}
+
+    - name: Extract Far plugin.hpp
+      run: |
+        $tag = '${{ steps.far_tag.outputs.tag }}'
+        $safeTag = '${{ steps.far_tag.outputs.safe }}'
+        $extractDir = "build\far_hpp"
+        $headerPath = "$extractDir\PluginSDK\Headers.c\plugin.hpp"
+
+        if (Test-Path $headerPath) {
+            Write-Host "Using cached plugin.hpp from $tag"
+            Copy-Item $headerPath "include\plugin.hpp" -Force
+            exit 0
+        }
+
+        $archInFilename = switch ('${{ matrix.arch }}') {
+            "arm64" { "ARM64" }
+            default { '${{ matrix.arch }}' }
+        }
+        $headers = @{
+            'User-Agent'    = 'PythonFar-CI'
+            'Authorization' = "Bearer ${{ secrets.GITHUB_TOKEN }}"
+        }
+        $asset = (Invoke-RestMethod -Uri "https://api.github.com/repos/FarGroup/FarManager/releases/tags/$([Uri]::EscapeDataString($tag))" -Headers $headers).assets |
+            Where-Object { $_.name -match "^Far[._](?:[^._]*[._])*$archInFilename[._].*\.7z$" -and $_.name -notlike "*.pdb.7z" } |
+            Select-Object -First 1
+        if (-not $asset) { Write-Host "No asset for $archInFilename in $tag, keeping existing include/plugin.hpp"; exit 0 }
+
+        New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
+        $archive = "$env:TEMP\far_archive.7z"
+        Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $archive -Headers $headers -UseBasicParsing
+        7z x $archive "-o$extractDir" "-aoa" "PluginSDK\Headers.c\plugin.hpp" | Out-Null
+        Remove-Item $archive -Force
+
+        if (Test-Path $headerPath) {
+            Copy-Item $headerPath "include\plugin.hpp" -Force
+            Write-Host "Copied plugin.hpp from $tag"
+        } else {
+            Write-Host "plugin.hpp not found in archive, keeping existing include/plugin.hpp"
+        }
+      shell: pwsh
+
     - name: Configure CMake
       run: |
         cd build
