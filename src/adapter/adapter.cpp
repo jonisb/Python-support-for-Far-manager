@@ -1218,33 +1218,29 @@ HANDLE PluginModule::OpenW(const OpenInfo* Info) {
     }
 
     // Try OpenW first, fall back to 'open'
-    PyObj method(PyObject_GetAttrString(m_PluginInstance, "OpenW"));
-    if (method && PyCallable_Check(method)) {
-        PyObj result(PyObject_CallFunctionObjArgs(method, info_obj.get(), nullptr));
-        if (result) {
-            LOG_TRACE("PluginModule::OpenW - Python OpenW succeeded");
-            if (PyLong_Check(result)) {
-                return (HANDLE)PyLong_AsVoidPtr(result);
+    {
+        const char* method_names[] = { "OpenW", "open" };
+        for (int i = 0; i < 2; ++i) {
+            PyObj method(PyObject_GetAttrString(m_PluginInstance, method_names[i]));
+            if (method && PyCallable_Check(method)) {
+                PyObj result(PyObject_CallFunctionObjArgs(method, info_obj.get(), nullptr));
+                if (result) {
+                    LOG_TRACE(std::string("PluginModule::OpenW - Python '") + method_names[i] + "' succeeded");
+                    if (PyLong_Check(result)) {
+                        return (HANDLE)PyLong_AsVoidPtr(result);
+                    }
+                    return INVALID_HANDLE_VALUE;
+                }
+                // Method raised — log traceback before clearing
+                std::wstring tb = CapturePythonTraceback();
+                if (!tb.empty()) {
+                    LOG_ERROR(std::string("PluginModule::OpenW - '") + method_names[i]
+                              + "' raised: " + WideToUTF8(tb.c_str()));
+                }
+            } else {
+                PyErr_Clear();
             }
-            return INVALID_HANDLE_VALUE;
         }
-        PyErr_Clear();
-    } else {
-        PyErr_Clear();
-    }
-
-    method.reset(PyObject_GetAttrString(m_PluginInstance, "open"));
-    if (method && PyCallable_Check(method)) {
-        PyObj result(PyObject_CallFunctionObjArgs(method, info_obj.get(), nullptr));
-        if (result) {
-            LOG_TRACE("PluginModule::OpenW - Python 'open' succeeded");
-            if (PyLong_Check(result)) {
-                return (HANDLE)PyLong_AsVoidPtr(result);
-            }
-        }
-        PyErr_Clear();
-    } else {
-        PyErr_Clear();
     }
 
     LOG_TRACE("PluginModule::OpenW - Python method not found or failed");
