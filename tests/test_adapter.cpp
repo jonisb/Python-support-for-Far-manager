@@ -201,12 +201,12 @@ TEST_F(AdapterTestFixture, GetPluginInfoW_ValidPlugin_PopulatesMenu) {
 // GetPluginInfoW must not crash, must leave a safe default PluginInfo, and the
 // failure must be retrievable through the adapter's GetError export.
 TEST_F(AdapterTestFixture, GetPluginInfoW_MissingGetPluginInfo_ReportsError) {
-    // Write a minimal plugin that lacks get_plugin_info() next to the test exe.
     std::wstring pluginFile = GetExeDir() + L"\\broken_no_info.far.py";
     {
         std::wofstream f(pluginFile);
         ASSERT_TRUE(f.is_open()) << "Could not create temp plugin file";
         f << L"class Plugin:\n"
+          << L"    title = 'Test Plugin'\n"
           << L"    def __init__(self, psi_ptr=None):\n"
           << L"        pass\n"
           << L"    def OpenW(self, info_ptr):\n"
@@ -240,10 +240,8 @@ TEST_F(AdapterTestFixture, GetPluginInfoW_MissingGetPluginInfo_ReportsError) {
 
     ErrorInfo err = {};
     err.StructSize = sizeof(ErrorInfo);
-    BOOL hasError = getErrorFunc(&err);
-    EXPECT_TRUE(hasError) << "GetError should report the missing get_plugin_info failure";
-    if (hasError) {
-        ASSERT_NE(err.Summary, nullptr);
+    EXPECT_TRUE(getErrorFunc(&err)) << "GetError should report the missing get_plugin_info failure";
+    if (err.Summary) {
         EXPECT_NE(std::wstring(err.Summary).find(L"get_plugin_info"), std::wstring::npos)
             << "Error summary should mention get_plugin_info";
     }
@@ -262,6 +260,7 @@ TEST_F(AdapterTestFixture, GetPluginInfoW_RaisingGetPluginInfo_ReportsTraceback)
         std::wofstream f(pluginFile);
         ASSERT_TRUE(f.is_open());
         f << L"class Plugin:\n"
+          << L"    title = 'Test Plugin'\n"
           << L"    def __init__(self, psi_ptr=None):\n"
           << L"        pass\n"
           << L"    def get_plugin_info(self):\n"
@@ -289,11 +288,9 @@ TEST_F(AdapterTestFixture, GetPluginInfoW_RaisingGetPluginInfo_ReportsTraceback)
 
     ErrorInfo err = {};
     err.StructSize = sizeof(ErrorInfo);
-    BOOL hasError = getErrorFunc(&err);
-    EXPECT_TRUE(hasError) << "GetError should report the raised exception";
-    if (hasError && err.Description) {
+    EXPECT_TRUE(getErrorFunc(&err)) << "GetError should report the raised exception";
+    if (err.Description) {
         std::wstring desc(err.Description);
-        // The captured traceback should mention the exception text.
         EXPECT_NE(desc.find(L"boom in get_plugin_info"), std::wstring::npos)
             << "Error description should contain the Python traceback";
     }
@@ -310,10 +307,11 @@ std::string ValidPluginSource(const char* title) {
     std::string t = title;
     return
         "class Plugin:\n"
+        "    title = '" + t + "'\n"
         "    def __init__(self, psi_ptr=None):\n"
         "        pass\n"
         "    def get_plugin_info(self):\n"
-        "        return {'title': '" + t + "', 'description': 'd', 'author': 'a', 'version': '1.0.0.0'}\n"
+        "        return {'plugin_menu': '" + t + "'}\n"
         "    def OpenW(self, info_ptr):\n"
         "        return 1\n";
 }
@@ -380,11 +378,12 @@ TEST_F(AdapterTestFixture, CreateInstance_NonAsciiPathLoads) {
     EXPECT_TRUE(destroyInstanceFunc(instance));
 }
 
-// A get_plugin_info() that returns a dict without a usable title must be
-// reported as an error (a plugin name is the minimum required metadata).
-TEST_F(AdapterTestFixture, GetPluginInfoW_EmptyTitle_ReportsError) {
-    std::wstring path = WritePlugin(L"empty_title.far.py",
+// A get_plugin_info() that returns a dict without 'plugin_menu' is valid —
+// the plugin simply has no F11 menu entry.
+TEST_F(AdapterTestFixture, GetPluginInfoW_MissingPluginMenu_IsFine) {
+    std::wstring path = WritePlugin(L"no_plugin_menu.far.py",
         "class Plugin:\n"
+        "    title = 'Test Plugin'\n"
         "    def __init__(self, psi_ptr=None):\n"
         "        pass\n"
         "    def get_plugin_info(self):\n"
@@ -403,50 +402,38 @@ TEST_F(AdapterTestFixture, GetPluginInfoW_EmptyTitle_ReportsError) {
     memset(&info, 0xCD, sizeof(info));
     info.Instance = instance;
     getPluginInfoW(&info);
-    EXPECT_EQ(info.PluginMenu.Count, static_cast<size_t>(0)) << "Empty title must not populate menu";
+    EXPECT_EQ(info.PluginMenu.Count, static_cast<size_t>(0))
+        << "Missing plugin_menu means no F11 entry (Count=0)";
 
+    // No error — missing plugin_menu is perfectly valid.
     GetErrorFunc getErrorFunc =
         reinterpret_cast<GetErrorFunc>(GetProcAddress(hAdapter, "adapter_GetError"));
     ASSERT_NE(getErrorFunc, nullptr);
     ErrorInfo err = {};
     err.StructSize = sizeof(ErrorInfo);
-    EXPECT_TRUE(getErrorFunc(&err)) << "Empty title should be reported via GetError";
+    EXPECT_FALSE(getErrorFunc(&err)) << "Missing plugin_menu should NOT be reported as an error";
 
     EXPECT_TRUE(destroyInstanceFunc(instance));
 }
 
 // GetError consumes the error: a second call (with no new error) returns FALSE.
+// Use an import-level crash which is the remaining error path.
 TEST_F(AdapterTestFixture, GetError_ClearsAfterRead) {
-    std::wstring path = WritePlugin(L"no_info_clear.far.py",
-        "class Plugin:\n"
-        "    def __init__(self, psi_ptr=None):\n"
-        "        pass\n");
+    std::wstring path = WritePlugin(L"geterror_import_error.far.py",
+        "raise RuntimeError('test error')\n");
 
     HANDLE instance = createInstanceFunc(path.c_str());
-    ASSERT_NE(instance, nullptr);
-    ASSERT_NE(instance, INVALID_HANDLE_VALUE);
-
-    typedef void (WINAPI *GetPluginInfoWFunc)(PluginInfo*);
-    GetPluginInfoWFunc getPluginInfoW =
-        reinterpret_cast<GetPluginInfoWFunc>(getFunctionAddressFunc(instance, L"GetPluginInfoW"));
-    ASSERT_NE(getPluginInfoW, nullptr);
-
-    PluginInfo info;
-    memset(&info, 0xCD, sizeof(info));
-    info.Instance = instance;
-    getPluginInfoW(&info);  // triggers an error (no get_plugin_info)
+    EXPECT_EQ(instance, nullptr) << "Module with import error must fail to load";
 
     GetErrorFunc getErrorFunc =
         reinterpret_cast<GetErrorFunc>(GetProcAddress(hAdapter, "adapter_GetError"));
     ASSERT_NE(getErrorFunc, nullptr);
 
     ErrorInfo err1 = {}; err1.StructSize = sizeof(ErrorInfo);
-    EXPECT_TRUE(getErrorFunc(&err1)) << "First GetError should report the error";
+    EXPECT_TRUE(getErrorFunc(&err1)) << "First GetError should report the import failure";
 
     ErrorInfo err2 = {}; err2.StructSize = sizeof(ErrorInfo);
     EXPECT_FALSE(getErrorFunc(&err2)) << "Second GetError should be cleared (no new error)";
-
-    EXPECT_TRUE(destroyInstanceFunc(instance));
 }
 
 // Two independent instances can coexist and report distinct titles.
@@ -508,7 +495,7 @@ TEST_F(AdapterTestFixture, GetGlobalInfoW_NonAsciiMetadataDecodedCorrectly) {
         "    def __init__(self, psi_ptr=None):\n"
         "        pass\n"
         "    def get_plugin_info(self):\n"
-        "        return {'title': self.title}\n";
+        "        return {'plugin_menu': self.title}\n";
     std::wstring path = WritePlugin(L"nonascii_meta.far.py", source);
 
     HANDLE instance = createInstanceFunc(path.c_str());

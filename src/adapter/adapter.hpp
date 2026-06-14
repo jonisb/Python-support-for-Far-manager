@@ -153,6 +153,9 @@ public:
     // Helper to call Python methods
     PyObject* CallMethod(const char* methodName, const char* format = nullptr, ...);
 
+    // Plugin title (class attribute), required to be non-empty.
+    const std::wstring& GetTitle() const { return m_Title; }
+
 private:
     // Report a fatal PluginInfo failure: log it, record it for Far's GetError,
     // and show a message box to the user. `detail` may contain a Python
@@ -178,16 +181,18 @@ private:
     UUID m_Guid;
 
     // Buffers for string data
-    std::vector<wchar_t> titleBuffer;
-    std::vector<wchar_t> descBuffer;
-    std::vector<wchar_t> authorBuffer;
-    std::vector<wchar_t> versionBuffer;
+    std::vector<wchar_t> menuBuffer;
+    std::vector<wchar_t> configBuffer;
+    std::vector<wchar_t> diskBuffer;
     std::vector<wchar_t> commandPrefixBuffer;
 
     // Arrays of string pointers for PluginInfo
     std::vector<const wchar_t*> menuStrings;
     std::vector<const wchar_t*> configStrings;
+    std::vector<const wchar_t*> diskStrings;
     std::vector<GUID> menuGuids;
+    std::vector<GUID> configGuids;
+    std::vector<GUID> diskGuids;
 };
 
 // Global adapter instance

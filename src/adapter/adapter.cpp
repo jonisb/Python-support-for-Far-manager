@@ -455,8 +455,15 @@ std::unique_ptr<PluginModule> PythonFarAdapter::CreatePluginModule(const wchar_t
         LOG_TRACE("Successfully loaded plugin module");
 
         auto pluginModule = std::make_unique<PluginModule>(filename, pModule.release(), pPluginClass.release());
-        
-        
+
+        // Plugin must have a non-empty title class attribute.
+        if (pluginModule->GetTitle().empty()) {
+            LOG_TRACE("Plugin has no title");
+            m_ErrorSummary = L"Plugin Error";
+            m_ErrorDescription = L"Plugin class must define a non-empty 'title' attribute";
+            return nullptr;
+        }
+
         return pluginModule;
 
     } catch (...) {
@@ -1024,22 +1031,22 @@ void PluginModule::ReportPluginInfoFailure(const std::wstring& summary, const st
 
 void PluginModule::GetPluginInfoW(PluginInfo* Info) {
     LOG_TRACE("PluginModule::GetPluginInfoW");
-    
+
     if (!Info) return;
 
     Info->StructSize = sizeof(PluginInfo);
     Info->Flags = 0;
     Info->CommandPrefix = nullptr;
     Info->Instance = nullptr;
-    
+
     Info->DiskMenu.Count = 0;
     Info->DiskMenu.Strings = nullptr;
     Info->DiskMenu.Guids = nullptr;
-    
+
     Info->PluginMenu.Count = 0;
     Info->PluginMenu.Strings = nullptr;
     Info->PluginMenu.Guids = nullptr;
-    
+
     Info->PluginConfig.Count = 0;
     Info->PluginConfig.Strings = nullptr;
     Info->PluginConfig.Guids = nullptr;
@@ -1067,7 +1074,7 @@ void PluginModule::GetPluginInfoW(PluginInfo* Info) {
         if (PyErr_Occurred()) PyErr_Clear();
         ReportPluginInfoFailure(
             L"Plugin does not implement get_plugin_info().",
-            L"Define get_plugin_info() returning a dict with at least a 'title', "
+            L"Define get_plugin_info() returning a dict, "
             L"or inherit from the far.Plugin base class which provides it.");
         return;
     }
@@ -1088,84 +1095,135 @@ void PluginModule::GetPluginInfoW(PluginInfo* Info) {
         if (PyErr_Occurred()) PyErr_Clear();
         ReportPluginInfoFailure(
             L"get_plugin_info() did not return a dict.",
-            L"It must return a dict with at least a 'title' key.");
+            L"It must return a dict.");
         return;
     }
 
-    // A plugin must provide at least a non-empty title (its name).
-    {
-        PyObject* titleCheck = PyDict_GetItemString(result, "title");  // borrowed
-        bool hasTitle = titleCheck && PyUnicode_Check(titleCheck)
-                        && PyUnicode_GetLength(titleCheck) > 0;
-        if (!hasTitle) {
-            ReportPluginInfoFailure(
-                L"get_plugin_info() did not provide a plugin name.",
-                L"The returned dict must contain a non-empty 'title'.");
-            return;
-        }
-    }
-    
-    // Parse the dictionary result
+    // --- Parse the dictionary ---
+
     PyObject* flagsObj = PyDict_GetItemString(result, "flags");
     if (flagsObj && PyLong_Check(flagsObj)) {
         Info->Flags = PyLong_AsLong(flagsObj);
     }
 
-    PyObject* titleObj = PyDict_GetItemString(result, "title");
-    if (titleObj && PyUnicode_Check(titleObj)) {
-        const char* titleStr = PyUnicode_AsUTF8(titleObj);
-        if (titleStr) {
-            int len = MultiByteToWideChar(CP_UTF8, 0, titleStr, -1, nullptr, 0);
-            titleBuffer.resize(len);
-            MultiByteToWideChar(CP_UTF8, 0, titleStr, -1, &titleBuffer[0], len);
-            menuStrings.clear();
-            menuStrings.push_back(&titleBuffer[0]);
-            menuGuids.clear();
-            menuGuids.push_back(m_Guid);  // Use the plugin's GUID
-            Info->PluginMenu.Guids = menuGuids.data();
-            Info->PluginMenu.Strings = menuStrings.data();
-            Info->PluginMenu.Count = menuStrings.size();
-        }
-    }
+    auto parseGuid = [](const wchar_t* s) -> GUID {
+        GUID g = {};
+        CLSIDFromString(s, &g);
+        return g;
+    };
 
-    PyObject* descObj = PyDict_GetItemString(result, "description");
-    if (descObj && PyUnicode_Check(descObj)) {
-        const char* descStr = PyUnicode_AsUTF8(descObj);
-        if (descStr) {
-            int len = MultiByteToWideChar(CP_UTF8, 0, descStr, -1, nullptr, 0);
-            descBuffer.resize(len);
-            MultiByteToWideChar(CP_UTF8, 0, descStr, -1, &descBuffer[0], len);
-            configStrings.clear();
-            configStrings.push_back(&descBuffer[0]);
-            // Re-use menuGuids or populate a new guids array for config. We can just point it to menuGuids since it has m_Guid
-            if (menuGuids.empty()) {
-                menuGuids.push_back(m_Guid);
+    auto pyToWide = [](PyObject* obj, std::vector<wchar_t>& buf) -> bool {
+        const char* utf8 = PyUnicode_AsUTF8(obj);
+        if (!utf8) return false;
+        int len = MultiByteToWideChar(CP_UTF8, 0, utf8, -1, nullptr, 0);
+        if (len <= 0) return false;
+        buf.resize(len);
+        MultiByteToWideChar(CP_UTF8, 0, utf8, -1, buf.data(), len);
+        return true;
+    };
+
+    auto readPair = [&](PyObject* item,
+                        GUID& outGuid,
+                        std::wstring& outText) -> bool {
+        if (!PySequence_Check(item)) return false;
+        Py_ssize_t itemLen = PySequence_Size(item);
+        if (itemLen != 2) return false;
+
+        PyObject* guidObj = PySequence_GetItem(item, 0);
+        PyObject* textObj = PySequence_GetItem(item, 1);
+        if (!guidObj || !textObj || !PyUnicode_Check(guidObj) || !PyUnicode_Check(textObj)) {
+            Py_XDECREF(guidObj); Py_XDECREF(textObj);
+            return false;
+        }
+        std::vector<wchar_t> tmp;
+        bool ok = pyToWide(textObj, tmp);
+        if (ok) outText = tmp.data();
+        ok = ok && pyToWide(guidObj, tmp);
+        if (ok) outGuid = parseGuid(tmp.data());
+        Py_XDECREF(guidObj); Py_XDECREF(textObj);
+        return ok;
+    };
+
+    auto buildMenu = [&](const char* key,
+                         std::vector<wchar_t>& buf,
+                         std::vector<const wchar_t*>& strs,
+                         std::vector<GUID>& guids,
+                         PluginMenuItem& menuItem) {
+        buf.clear(); strs.clear(); guids.clear();
+        PyObject* obj = PyDict_GetItemString(result, key);
+        if (!obj) return;
+
+        // plain string → single item, plugin GUID
+        if (PyUnicode_Check(obj)) {
+            const char* utf8 = PyUnicode_AsUTF8(obj);
+            if (!utf8 || !*utf8) return;
+            int len = MultiByteToWideChar(CP_UTF8, 0, utf8, -1, nullptr, 0);
+            if (len <= 0) return;
+            buf.resize(len);
+            MultiByteToWideChar(CP_UTF8, 0, utf8, -1, buf.data(), len);
+            strs.push_back(buf.data());
+            guids.push_back(m_Guid);
+            menuItem.Guids = guids.data();
+            menuItem.Strings = strs.data();
+            menuItem.Count = 1;
+            return;
+        }
+
+        if (!PySequence_Check(obj)) return;
+        Py_ssize_t seqLen = PySequence_Size(obj);
+        if (seqLen <= 0) return;
+
+        // [guid, str] → single item, explicit GUID
+        if (seqLen == 2) {
+            PyObject* first = PySequence_GetItem(obj, 0);
+            bool firstIsStr = PyUnicode_Check(first);
+            Py_XDECREF(first);
+            if (firstIsStr) {
+                GUID itemGuid = {};
+                std::wstring itemText;
+                if (readPair(obj, itemGuid, itemText)) {
+                    buf.resize(itemText.size() + 1);
+                    wcscpy_s(buf.data(), buf.size(), itemText.c_str());
+                    strs.push_back(buf.data());
+                    guids.push_back(itemGuid);
+                }
+                menuItem.Guids = guids.data();
+                menuItem.Strings = strs.data();
+                menuItem.Count = static_cast<size_t>(strs.size());
+                return;
             }
-            Info->PluginConfig.Guids = menuGuids.data();
-            Info->PluginConfig.Strings = configStrings.data();
-            Info->PluginConfig.Count = configStrings.size();
         }
-    }
 
-    PyObject* authorObj = PyDict_GetItemString(result, "author");
-    if (authorObj && PyUnicode_Check(authorObj)) {
-        const char* authorStr = PyUnicode_AsUTF8(authorObj);
-        if (authorStr) {
-            int len = MultiByteToWideChar(CP_UTF8, 0, authorStr, -1, nullptr, 0);
-            authorBuffer.resize(len);
-            MultiByteToWideChar(CP_UTF8, 0, authorStr, -1, &authorBuffer[0], len);
+        // [[guid, str], …] → multiple items
+        struct Item { GUID guid; std::wstring text; };
+        std::vector<Item> items;
+        for (Py_ssize_t i = 0; i < seqLen; ++i) {
+            PyObject* elem = PySequence_GetItem(obj, i);
+            if (!elem) continue;
+            Item it = {};
+            if (readPair(elem, it.guid, it.text)) {
+                items.push_back(std::move(it));
+            }
+            Py_XDECREF(elem);
         }
-    }
+        if (items.empty()) return;
 
-    PyObject* versionObj = PyDict_GetItemString(result, "version");
-    if (versionObj && PyUnicode_Check(versionObj)) {
-        const char* versionStr = PyUnicode_AsUTF8(versionObj);
-        if (versionStr) {
-            int len = MultiByteToWideChar(CP_UTF8, 0, versionStr, -1, nullptr, 0);
-            versionBuffer.resize(len);
-            MultiByteToWideChar(CP_UTF8, 0, versionStr, -1, &versionBuffer[0], len);
+        for (const auto& it : items) {
+            size_t pos = buf.size();
+            for (wchar_t c : it.text)
+                buf.push_back(c);
+            buf.push_back(L'\0');
+            strs.push_back(buf.data() + pos);
+            guids.push_back(it.guid);
         }
-    }
+        menuItem.Guids = guids.data();
+        menuItem.Strings = strs.data();
+        menuItem.Count = static_cast<size_t>(strs.size());
+    };
+
+    buildMenu("plugin_menu",   menuBuffer,   menuStrings,   menuGuids,   Info->PluginMenu);
+    buildMenu("plugin_config", configBuffer, configStrings, configGuids, Info->PluginConfig);
+    buildMenu("disk_menu",     diskBuffer,   diskStrings,   diskGuids,   Info->DiskMenu);
 
     PyObject* prefixObj = PyDict_GetItemString(result, "command_prefix");
     if (prefixObj && PyUnicode_Check(prefixObj)) {
