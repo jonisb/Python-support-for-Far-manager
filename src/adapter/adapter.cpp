@@ -1099,6 +1099,37 @@ void PluginModule::GetPluginInfoW(PluginInfo* Info) {
         return;
     }
 
+    // Reject any unrecognised keys.
+    {
+        const char* validKeys[] = {
+            "plugin_menu", "plugin_config", "disk_menu",
+            "flags", "command_prefix", nullptr
+        };
+        PyObject* keyList = PyDict_Keys(result);
+        bool hasBad = false;
+        if (keyList) {
+            Py_ssize_t n = PyList_Size(keyList);
+            for (Py_ssize_t i = 0; i < n; ++i) {
+                PyObject* key = PyList_GetItem(keyList, i);
+                if (!key || !PyUnicode_Check(key)) continue;
+                const char* ks = PyUnicode_AsUTF8(key);
+                if (!ks) continue;
+                bool found = false;
+                for (const char** vk = validKeys; *vk; ++vk) {
+                    if (strcmp(ks, *vk) == 0) { found = true; break; }
+                }
+                if (!found) { hasBad = true; break; }
+            }
+            Py_DECREF(keyList);
+        }
+        if (hasBad) {
+            ReportPluginInfoFailure(
+                L"get_plugin_info() returned a dict with unrecognised keys.",
+                L"Supported keys: plugin_menu, plugin_config, disk_menu, flags, command_prefix.");
+            return;
+        }
+    }
+
     // --- Parse the dictionary ---
 
     PyObject* flagsObj = PyDict_GetItemString(result, "flags");
