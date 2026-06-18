@@ -387,7 +387,7 @@ TEST_F(AdapterTestFixture, GetPluginInfoW_MissingPluginMenu_IsFine) {
         "    def __init__(self, psi_ptr=None):\n"
         "        pass\n"
         "    def get_plugin_info(self):\n"
-        "        return {'title': '', 'description': 'no name'}\n");
+        "        return {}\n");
 
     HANDLE instance = createInstanceFunc(path.c_str());
     ASSERT_NE(instance, nullptr);
