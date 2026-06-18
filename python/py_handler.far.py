@@ -16,10 +16,7 @@ class Plugin:
 
     def get_plugin_info(self):
         return {
-            "title": self.title,
-            "description": self.description,
-            "author": self.author,
-            "version": ".".join(str(v) for v in self.version),
+            "plugin_menu": self.title,
             "flags": far_api.PF_FULLCMDLINE,
             "command_prefix": "py",
         }
